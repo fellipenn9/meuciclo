@@ -62,7 +62,7 @@ a{color:var(--primary);text-decoration:none}
 .content{flex:1;padding:16px;padding-bottom:calc(var(--nav-height) + 24px);overflow-y:auto}
 
 /* Bottom nav (mobile) */
-.bottom-nav{position:fixed;bottom:0;left:0;right:0;height:var(--nav-height);background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-around;z-index:100;padding-bottom:env(safe-area-inset-bottom)}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;height:calc(var(--nav-height) + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-around;z-index:100;padding-bottom:env(safe-area-inset-bottom);transform:translateZ(0);-webkit-transform:translateZ(0);backface-visibility:hidden;-webkit-backface-visibility:hidden}
 .bottom-nav button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 12px;border-radius:var(--radius-sm);font-size:.65rem;color:var(--text-secondary);transition:var(--transition);min-width:56px}
 .bottom-nav button .nav-icon{font-size:1.4rem;line-height:1}
 .bottom-nav button.active{color:var(--primary)}
