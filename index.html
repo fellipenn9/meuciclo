@@ -1,0 +1,2908 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#8B5CF6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Controle de ciclo menstrual — privacidade total, sincronização criptografada">
+<meta name="author" content="Fellipe Santos">
+<meta name="copyright" content="&copy; 2025-2026 Fellipe Santos. Todos os direitos reservados.">
+<title>MeuCiclo</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-auth-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database-compat.js" defer></script>
+<style>
+/* ============ RESET & VARIABLES ============ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --menstrual:#E63946;--menstrual-bg:#FEE2E2;
+  --fertile:#8B5CF6;--fertile-bg:#EDE9FE;
+  --ovulation:#EC4899;--ovulation-bg:#FCE7F3;
+  --safe:#10B981;--safe-bg:#D1FAE5;
+  --luteal:#F59E0B;--luteal-bg:#FEF3C7;
+  --primary:#8B5CF6;--primary-dark:#7C3AED;--primary-light:#A78BFA;
+  --bg:#FDF2F8;--surface:#FFFFFF;--surface-alt:#F9FAFB;
+  --text:#1F2937;--text-secondary:#6B7280;--text-light:#9CA3AF;
+  --sidebar-bg:#4C1D95;--sidebar-text:#E9D5FF;
+  --border:#E5E7EB;--shadow:0 1px 3px rgba(0,0,0,.1);
+  --radius:12px;--radius-sm:8px;--radius-lg:16px;
+  --nav-height:64px;
+  --transition:all .2s ease;
+}
+html{font-size:16px;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;overflow-x:hidden}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font:inherit;color:var(--text)}
+a{color:var(--primary);text-decoration:none}
+
+/* ============ LAYOUT ============ */
+.app{display:flex;min-height:100dvh}
+.sidebar{display:none;width:240px;background:var(--sidebar-bg);color:var(--sidebar-text);flex-shrink:0;padding:24px 0;position:fixed;top:0;left:0;height:100vh;z-index:100;flex-direction:column}
+.sidebar-brand{padding:0 24px 24px;text-align:center;border-bottom:1px solid rgba(255,255,255,.1)}
+.sidebar-brand h1{font-size:1.4rem;color:#fff;margin-bottom:4px}
+.sidebar-brand small{font-size:.75rem;opacity:.7}
+.sidebar-nav{flex:1;padding:16px 12px}
+.sidebar-nav button{display:flex;align-items:center;gap:12px;width:100%;padding:12px 16px;border-radius:var(--radius-sm);color:var(--sidebar-text);font-size:.95rem;transition:var(--transition)}
+.sidebar-nav button:hover,.sidebar-nav button.active{background:rgba(255,255,255,.12);color:#fff}
+.sidebar-nav button .nav-icon{font-size:1.3rem;width:28px;text-align:center}
+
+.main{flex:1;display:flex;flex-direction:column;min-height:100dvh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50}
+.topbar h2{font-size:1.1rem;font-weight:600}
+.topbar-actions{display:flex;gap:8px}
+.topbar-actions button{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:1.1rem;transition:var(--transition)}
+.topbar-actions button:hover{background:var(--menstrual-bg)}
+
+.content{flex:1;padding:16px;padding-bottom:calc(var(--nav-height) + 24px);overflow-y:auto}
+
+/* Bottom nav (mobile) */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;height:var(--nav-height);background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-around;z-index:100;padding-bottom:env(safe-area-inset-bottom)}
+.bottom-nav button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 12px;border-radius:var(--radius-sm);font-size:.65rem;color:var(--text-secondary);transition:var(--transition);min-width:56px}
+.bottom-nav button .nav-icon{font-size:1.4rem;line-height:1}
+.bottom-nav button.active{color:var(--primary)}
+.bottom-nav button.active .nav-icon{transform:scale(1.1)}
+
+/* ============ PAGE CONTAINER ============ */
+.page{display:none;animation:fadeIn .25s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ============ CARDS ============ */
+.card{background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-bottom:16px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.card-header h3{font-size:1rem;font-weight:600}
+
+/* ============ DASHBOARD ============ */
+.cycle-ring{position:relative;width:200px;height:200px;margin:0 auto 20px}
+.cycle-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.cycle-ring .track{fill:none;stroke:var(--border);stroke-width:10}
+.cycle-ring .progress{fill:none;stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .6s ease}
+.cycle-ring-info{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
+.cycle-ring-info .day-num{font-size:2.8rem;font-weight:700;line-height:1}
+.cycle-ring-info .day-label{font-size:.8rem;color:var(--text-secondary)}
+.phase-badge{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:20px;font-size:.9rem;font-weight:600;margin:0 auto 16px;text-align:center}
+.countdown{text-align:center;color:var(--text-secondary);font-size:.9rem;margin-bottom:20px}
+.quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.quick-btn{display:flex;align-items:center;gap:10px;padding:14px;border-radius:var(--radius);border:1.5px solid var(--border);font-size:.85rem;font-weight:500;transition:var(--transition)}
+.quick-btn:hover{border-color:var(--primary);background:var(--fertile-bg)}
+.quick-btn .qicon{font-size:1.4rem}
+
+/* Mini calendar */
+.mini-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.mini-cal .day-header{font-size:.65rem;color:var(--text-light);padding:4px 0;font-weight:600}
+.mini-cal .day-cell{width:100%;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;font-size:.7rem;position:relative}
+.mini-cal .day-cell.today{font-weight:700;box-shadow:inset 0 0 0 2px var(--primary)}
+.mini-cal .day-cell.empty{visibility:hidden}
+
+/* ============ CALENDAR ============ */
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.cal-header h3{font-size:1.1rem;font-weight:600;min-width:160px;text-align:center}
+.cal-nav{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:1.2rem;transition:var(--transition);background:var(--surface);border:1px solid var(--border)}
+.cal-nav:hover{background:var(--fertile-bg);border-color:var(--primary)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:16px}
+.cal-grid .day-header{font-size:.75rem;color:var(--text-light);text-align:center;padding:8px 0;font-weight:600}
+.cal-day{aspect-ratio:1;border-radius:var(--radius-sm);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.85rem;cursor:pointer;transition:var(--transition);position:relative;border:2px solid transparent;gap:1px}
+.cal-day:hover{background:var(--surface-alt);border-color:var(--border)}
+.cal-day.empty{cursor:default}
+.cal-day.empty:hover{background:none;border-color:transparent}
+.cal-day.today{border-color:var(--primary);font-weight:700}
+.cal-day.selected{border-color:var(--primary-dark);background:var(--fertile-bg)}
+.cal-day .phase-dot{font-size:.7rem;line-height:1}
+.cal-day.predicted{opacity:.6;border-style:dashed}
+.cal-day .day-num{font-size:.82rem;line-height:1}
+.cal-day.has-log::after{content:'';width:4px;height:4px;border-radius:50%;background:var(--primary);position:absolute;bottom:3px}
+
+/* Calendar legend */
+.cal-legend{display:flex;flex-wrap:wrap;gap:12px;padding:12px 0}
+.cal-legend-item{display:flex;align-items:center;gap:4px;font-size:.75rem;color:var(--text-secondary)}
+.cal-legend-item .dot{width:10px;height:10px;border-radius:50%}
+
+/* Day detail panel */
+.day-detail{background:var(--surface);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-top:12px;animation:slideUp .2s ease}
+@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.day-detail-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.day-detail-header h4{font-size:1rem;font-weight:600}
+.day-detail .detail-phase{display:flex;align-items:center;gap:6px;font-size:.9rem;margin-bottom:8px}
+.day-detail .detail-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.detail-btn{padding:8px 14px;border-radius:var(--radius-sm);font-size:.8rem;font-weight:500;transition:var(--transition)}
+.detail-btn.primary{background:var(--primary);color:#fff}
+.detail-btn.primary:hover{background:var(--primary-dark)}
+.detail-btn.outline{border:1.5px solid var(--border)}
+.detail-btn.outline:hover{border-color:var(--primary);background:var(--fertile-bg)}
+.detail-btn.danger{border:1.5px solid var(--menstrual);color:var(--menstrual)}
+.detail-btn.danger:hover{background:var(--menstrual-bg)}
+.detail-symptoms{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.detail-symptoms .chip{padding:4px 10px;border-radius:12px;font-size:.75rem;background:var(--surface-alt);border:1px solid var(--border)}
+
+/* ============ REGISTER ============ */
+.register-section{margin-bottom:24px}
+.register-section h3{font-size:.95rem;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.flow-options{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.flow-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 8px;border-radius:var(--radius-sm);border:2px solid var(--border);font-size:.75rem;transition:var(--transition)}
+.flow-btn:hover{border-color:var(--primary-light)}
+.flow-btn.active{border-color:var(--menstrual);background:var(--menstrual-bg);color:var(--menstrual)}
+.flow-btn .flow-icon{font-size:1.4rem}
+
+.symptom-chips,.mood-chips,.mucus-chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip-btn{padding:8px 14px;border-radius:20px;border:1.5px solid var(--border);font-size:.8rem;transition:var(--transition);display:flex;align-items:center;gap:6px}
+.chip-btn:hover{border-color:var(--primary-light)}
+.chip-btn.active{border-color:var(--primary);background:var(--fertile-bg);color:var(--primary-dark)}
+.chip-btn .chip-icon{font-size:1rem}
+
+.mood-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px;border-radius:var(--radius-sm);border:2px solid var(--border);font-size:.7rem;transition:var(--transition);min-width:64px}
+.mood-btn:hover{border-color:var(--primary-light)}
+.mood-btn.active{border-color:var(--primary);background:var(--fertile-bg)}
+.mood-btn .mood-emoji{font-size:1.6rem}
+
+.energy-slider{width:100%;margin:8px 0}
+.energy-slider input[type=range]{-webkit-appearance:none;width:100%;height:6px;border-radius:3px;background:linear-gradient(90deg,var(--menstrual),var(--luteal),var(--safe));outline:none}
+.energy-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:var(--surface);border:3px solid var(--primary);cursor:pointer;box-shadow:var(--shadow)}
+.energy-labels{display:flex;justify-content:space-between;font-size:.75rem;color:var(--text-secondary)}
+
+.sex-options{display:flex;gap:8px}
+.sex-btn{flex:1;padding:12px;border-radius:var(--radius-sm);border:2px solid var(--border);text-align:center;font-size:.85rem;transition:var(--transition)}
+.sex-btn:hover{border-color:var(--primary-light)}
+.sex-btn.active{border-color:var(--primary);background:var(--fertile-bg)}
+
+.register-notes textarea{width:100%;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);resize:vertical;min-height:80px;font-size:.85rem}
+.register-notes textarea:focus{outline:none;border-color:var(--primary)}
+
+.register-date{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.register-date input[type=date]{padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:.9rem}
+.register-date input:focus{outline:none;border-color:var(--primary)}
+
+.save-btn{width:100%;padding:14px;background:var(--primary);color:#fff;border-radius:var(--radius);font-size:1rem;font-weight:600;transition:var(--transition)}
+.save-btn:hover{background:var(--primary-dark)}
+.save-btn:active{transform:scale(.98)}
+
+/* ============ INSIGHTS ============ */
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px}
+.stat-card{background:var(--surface);border-radius:var(--radius);padding:16px;text-align:center;box-shadow:var(--shadow)}
+.stat-card .stat-value{font-size:1.8rem;font-weight:700;color:var(--primary)}
+.stat-card .stat-label{font-size:.75rem;color:var(--text-secondary);margin-top:4px}
+.stat-card .stat-icon{font-size:1.4rem;margin-bottom:4px}
+.chart-container{background:var(--surface);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:16px}
+.chart-container h3{font-size:.95rem;font-weight:600;margin-bottom:12px}
+.chart-container canvas{width:100%!important;max-height:220px}
+.regularity-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:16px;font-size:.85rem;font-weight:500}
+
+/* Year overview */
+.year-overview{margin-bottom:16px}
+.year-overview h3{font-size:.95rem;font-weight:600;margin-bottom:12px}
+.year-months{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.year-month{background:var(--surface);border-radius:var(--radius-sm);padding:8px}
+.year-month .month-name{font-size:.7rem;font-weight:600;color:var(--text-secondary);margin-bottom:4px;text-align:center}
+.year-month .month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px}
+.year-month .month-grid .yd{width:100%;aspect-ratio:1;border-radius:2px;font-size:0}
+
+/* Symptom patterns */
+.symptom-pattern{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.symptom-pattern:last-child{border:none}
+.symptom-pattern .sp-name{flex:1;font-size:.85rem}
+.symptom-pattern .sp-bar{flex:2;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
+.symptom-pattern .sp-bar .sp-fill{height:100%;border-radius:4px;background:var(--primary);transition:width .4s ease}
+.symptom-pattern .sp-count{font-size:.75rem;color:var(--text-secondary);min-width:32px;text-align:right}
+
+/* ============ SETTINGS ============ */
+.setting-group{margin-bottom:24px}
+.setting-group h3{font-size:.95rem;font-weight:600;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--surface-alt)}
+.setting-row:last-child{border:none}
+.setting-label{font-size:.9rem}
+.setting-label small{display:block;font-size:.75rem;color:var(--text-secondary);margin-top:2px}
+.setting-control input[type=number]{width:64px;padding:6px 8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);text-align:center;font-size:.9rem}
+.setting-control input[type=number]:focus{outline:none;border-color:var(--primary)}
+.setting-control input[type=time]{padding:6px 8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:.9rem}
+.toggle{position:relative;width:48px;height:26px;background:var(--border);border-radius:13px;cursor:pointer;transition:var(--transition)}
+.toggle.on{background:var(--primary)}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;transition:var(--transition);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.toggle.on::after{left:25px}
+.setting-btn{padding:10px 20px;border-radius:var(--radius-sm);font-size:.85rem;font-weight:500;transition:var(--transition)}
+.setting-btn.primary{background:var(--primary);color:#fff}
+.setting-btn.primary:hover{background:var(--primary-dark)}
+.setting-btn.outline{border:1.5px solid var(--border)}
+.setting-btn.outline:hover{border-color:var(--primary);background:var(--fertile-bg)}
+.setting-btn.danger{border:1.5px solid var(--menstrual);color:var(--menstrual)}
+.setting-btn.danger:hover{background:var(--menstrual-bg)}
+.setting-actions{display:flex;gap:8px;flex-wrap:wrap}
+.disclaimer-box{background:var(--luteal-bg);border:1px solid var(--luteal);border-radius:var(--radius-sm);padding:14px;font-size:.8rem;line-height:1.5;color:#92400E}
+
+/* PIN modal */
+.pin-overlay{position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px}
+.pin-overlay h2{font-size:1.3rem;font-weight:600}
+.pin-dots{display:flex;gap:12px}
+.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--primary);transition:var(--transition)}
+.pin-dot.filled{background:var(--primary)}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:260px}
+.pin-key{width:72px;height:72px;border-radius:50%;display:grid;place-items:center;font-size:1.5rem;font-weight:600;border:1.5px solid var(--border);transition:var(--transition)}
+.pin-key:hover{background:var(--fertile-bg);border-color:var(--primary)}
+.pin-key.empty{border:none;cursor:default}
+.pin-key.backspace{font-size:1.2rem}
+
+/* ============ ONBOARDING MODAL ============ */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .2s ease}
+.modal{background:var(--surface);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:24px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;animation:slideUp .3s ease}
+.modal.center{border-radius:var(--radius-lg);align-self:center;margin:16px}
+.modal h2{font-size:1.2rem;font-weight:600;margin-bottom:8px}
+.modal p{font-size:.9rem;color:var(--text-secondary);margin-bottom:16px;line-height:1.5}
+.modal label{display:block;font-size:.85rem;font-weight:500;margin-bottom:6px}
+.modal input[type=date]{width:100%;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:1rem;margin-bottom:16px}
+.modal input:focus{outline:none;border-color:var(--primary)}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end}
+
+/* ============ TOAST ============ */
+.toast{position:fixed;bottom:calc(var(--nav-height) + 16px);left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:12px 24px;border-radius:var(--radius);font-size:.85rem;z-index:300;animation:toastIn .3s ease;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,20px)}to{opacity:1;transform:translate(-50%,0)}}
+.toast.out{animation:toastOut .3s ease forwards}
+@keyframes toastOut{to{opacity:0;transform:translate(-50%,20px)}}
+
+/* ============ RESPONSIVE DESKTOP ============ */
+@media(min-width:768px){
+  .sidebar{display:flex}
+  .main{margin-left:240px}
+  .bottom-nav{display:none}
+  .content{padding:24px;padding-bottom:24px;max-width:900px;margin:0 auto}
+  .topbar{padding:16px 24px}
+  .modal{align-self:center;border-radius:var(--radius-lg);margin:16px}
+  .stats-grid{grid-template-columns:repeat(4,1fr)}
+  .quick-actions{grid-template-columns:repeat(4,1fr)}
+  .year-months{grid-template-columns:repeat(4,1fr)}
+  .flow-options{grid-template-columns:repeat(5,1fr)}
+}
+
+/* ============ PHASE COLORS ============ */
+.phase-menstrual{background:var(--menstrual-bg);color:var(--menstrual)}
+.phase-fertile{background:var(--fertile-bg);color:var(--fertile)}
+.phase-ovulation{background:var(--ovulation-bg);color:var(--ovulation)}
+.phase-safe{background:var(--safe-bg);color:var(--safe)}
+.phase-luteal{background:var(--luteal-bg);color:var(--luteal)}
+.bg-menstrual{background:var(--menstrual)}
+.bg-fertile{background:var(--fertile)}
+.bg-ovulation{background:var(--ovulation)}
+.bg-safe{background:var(--safe)}
+.bg-luteal{background:var(--luteal)}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--text-light)}
+
+/* Install banner */
+.install-banner{display:none;background:linear-gradient(135deg,var(--primary),var(--ovulation));color:#fff;padding:14px 20px;border-radius:var(--radius);margin-bottom:16px;align-items:center;gap:12px}
+.install-banner.show{display:flex}
+.install-banner p{flex:1;font-size:.85rem}
+.install-banner button{padding:8px 16px;background:rgba(255,255,255,.2);color:#fff;border-radius:var(--radius-sm);font-size:.8rem;font-weight:600;backdrop-filter:blur(4px)}
+.install-banner .close-banner{padding:4px;background:none;font-size:1.2rem;opacity:.7}
+
+/* ============ LOGIN / PROFILE SCREEN ============ */
+.login-screen{position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:24px}
+.login-screen h1{font-size:1.6rem;font-weight:700;color:var(--primary)}
+.login-screen .login-subtitle{font-size:.9rem;color:var(--text-secondary)}
+.profile-cards{display:flex;gap:16px;flex-wrap:wrap;justify-content:center}
+.profile-card{display:flex;flex-direction:column;align-items:center;gap:8px;padding:24px 32px;background:var(--surface);border-radius:var(--radius-lg);border:2px solid var(--border);cursor:pointer;transition:var(--transition);min-width:140px;box-shadow:var(--shadow)}
+.profile-card:hover{border-color:var(--primary);background:var(--fertile-bg);transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.profile-card .profile-avatar{font-size:2.8rem;line-height:1}
+.profile-card .profile-name{font-size:1rem;font-weight:600}
+.profile-card .profile-role{font-size:.75rem;color:var(--text-secondary)}
+.profile-card .profile-pin-icon{font-size:.7rem;color:var(--text-light);margin-top:2px}
+.login-actions{display:flex;flex-direction:column;gap:8px;align-items:center;margin-top:8px}
+.login-actions button{font-size:.85rem;color:var(--primary);padding:8px 16px;border-radius:var(--radius-sm);transition:var(--transition)}
+.login-actions button:hover{background:var(--fertile-bg)}
+.login-footer{font-size:.75rem;color:var(--text-light);margin-top:12px}
+
+/* Avatar grid */
+.avatar-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:12px 0}
+.avatar-grid button{font-size:1.8rem;width:48px;height:48px;border-radius:50%;border:2px solid var(--border);display:grid;place-items:center;transition:var(--transition);background:var(--surface)}
+.avatar-grid button:hover{border-color:var(--primary-light);background:var(--fertile-bg)}
+.avatar-grid button.active{border-color:var(--primary);background:var(--fertile-bg);box-shadow:0 0 0 2px var(--primary-light)}
+
+/* Role selector */
+.role-options{display:flex;gap:8px;margin:8px 0 16px}
+.role-btn{flex:1;padding:12px;border-radius:var(--radius-sm);border:2px solid var(--border);text-align:center;font-size:.85rem;transition:var(--transition)}
+.role-btn:hover{border-color:var(--primary-light)}
+.role-btn.active{border-color:var(--primary);background:var(--fertile-bg)}
+
+/* Topbar profile */
+.topbar-profile{display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 8px;border-radius:var(--radius-sm);transition:var(--transition);position:relative}
+.topbar-profile:hover{background:var(--surface-alt)}
+.topbar-profile .tp-avatar{font-size:1.3rem}
+.topbar-profile .tp-name{font-size:.85rem;font-weight:500;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-profile .tp-arrow{font-size:.6rem;color:var(--text-secondary)}
+.profile-dropdown{position:absolute;top:100%;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 4px 12px rgba(0,0,0,.12);min-width:160px;z-index:60;display:none;overflow:hidden}
+.profile-dropdown.show{display:block}
+.profile-dropdown button{display:flex;align-items:center;gap:8px;width:100%;padding:10px 14px;font-size:.85rem;transition:var(--transition);text-align:left}
+.profile-dropdown button:hover{background:var(--surface-alt)}
+
+/* Sidebar profile */
+.sidebar-profile{padding:12px 24px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px}
+.sidebar-profile .sp-avatar{font-size:1.6rem}
+.sidebar-profile .sp-name{font-size:.9rem;color:#fff;font-weight:500}
+.sidebar-profile .sp-role{font-size:.7rem;color:var(--sidebar-text);opacity:.7}
+.sidebar-profile-switch{padding:4px 24px 12px;border-bottom:1px solid rgba(255,255,255,.1)}
+.sidebar-profile-switch button{font-size:.75rem;color:var(--sidebar-text);opacity:.7;transition:var(--transition)}
+.sidebar-profile-switch button:hover{opacity:1}
+
+/* Profile badge on logs */
+.profile-badge{font-size:.75rem;color:var(--text-light);font-style:italic;margin-top:4px}
+
+/* Profile settings card */
+.profile-settings-card{display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface-alt);border-radius:var(--radius-sm);margin-bottom:8px}
+.profile-settings-card .psc-avatar{font-size:1.6rem}
+.profile-settings-card .psc-info{flex:1}
+.profile-settings-card .psc-name{font-size:.9rem;font-weight:600}
+.profile-settings-card .psc-role{font-size:.75rem;color:var(--text-secondary)}
+.profile-settings-card .psc-actions{display:flex;gap:6px}
+
+/* ============ SYNC ============ */
+.sync-indicator{display:none;width:36px;height:36px;border-radius:50%;place-items:center;font-size:1.1rem;transition:var(--transition);cursor:pointer;position:relative}
+.sync-indicator.show{display:grid}
+.sync-indicator .sync-dot{position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--surface)}
+.sync-dot.ok{background:var(--safe)}
+.sync-dot.syncing{background:var(--luteal);animation:pulse 1s infinite}
+.sync-dot.error{background:var(--menstrual)}
+.sync-dot.offline{background:var(--text-light)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.sync-tooltip{position:absolute;top:100%;right:-8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;box-shadow:0 4px 12px rgba(0,0,0,.12);font-size:.8rem;z-index:60;display:none;min-width:180px;max-width:calc(100vw - 32px);white-space:normal}
+.sync-tooltip.show{display:block}
+.sync-tooltip .sync-status-text{font-weight:600;margin-bottom:4px}
+.sync-tooltip .sync-last{color:var(--text-secondary);font-size:.75rem}
+.sync-tooltip .sync-actions{display:flex;gap:6px;margin-top:8px}
+.sync-setup-box{background:var(--surface-alt);border:1.5px dashed var(--border);border-radius:var(--radius-sm);padding:16px;text-align:center}
+.sync-setup-box p{font-size:.85rem;color:var(--text-secondary);margin-bottom:12px;line-height:1.4}
+.sync-status-box{background:var(--surface-alt);border-radius:var(--radius-sm);padding:14px}
+.sync-status-box .sync-info-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;font-size:.85rem}
+.sync-status-box .sync-info-label{color:var(--text-secondary)}
+.modal input[type=email],.modal input[type=password]{width:100%;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:1rem;margin-bottom:12px}
+.modal input[type=email]:focus,.modal input[type=password]:focus{outline:none;border-color:var(--primary)}
+.invite-link-box{background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;word-break:break-all;font-size:.75rem;font-family:monospace;margin:12px 0;user-select:all;-webkit-user-select:all;max-height:80px;overflow-y:auto;line-height:1.4}
+.copyright-text{text-align:center;padding:16px 0 8px;font-size:.75rem;color:var(--text-light);line-height:1.6}
+</style>
+</head>
+<body>
+
+<!-- ========== LOGIN / PROFILE SCREEN ========== -->
+<div id="loginScreen" class="login-screen" style="display:none">
+  <div style="font-size:2.8rem">🌸</div>
+  <h1>MeuCiclo</h1>
+  <p class="login-subtitle">Quem está usando?</p>
+  <div class="profile-cards" id="profileCards"></div>
+  <div class="login-actions" id="loginActions"></div>
+  <p class="login-footer">Os dados do ciclo são compartilhados entre os perfis neste aparelho</p>
+</div>
+
+<!-- ========== PIN SCREEN (per-profile) ========== -->
+<div id="pinScreen" class="pin-overlay" style="display:none">
+  <div style="font-size:2.4rem" id="pinAvatar">🌸</div>
+  <h2 id="pinTitle">MeuCiclo</h2>
+  <p id="pinSubtitle" style="color:var(--text-secondary);font-size:.9rem">Digite seu PIN</p>
+  <div class="pin-dots" id="pinDots"></div>
+  <div class="pin-pad" id="pinPad"></div>
+  <button style="color:var(--text-secondary);font-size:.8rem;margin-top:8px" onclick="pinBackToLogin()">Voltar</button>
+</div>
+
+<!-- ========== APP SHELL ========== -->
+<div class="app" id="appShell" style="display:none">
+
+  <!-- Sidebar (desktop) -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h1>🌸 MeuCiclo</h1>
+      <small>Seu ciclo, sua privacidade</small>
+    </div>
+    <div class="sidebar-profile" id="sidebarProfile">
+      <span class="sp-avatar" id="sidebarAvatar"></span>
+      <div><div class="sp-name" id="sidebarName"></div><div class="sp-role" id="sidebarRole"></div></div>
+    </div>
+    <div class="sidebar-profile-switch"><button onclick="switchProfile()">Trocar perfil</button></div>
+    <nav class="sidebar-nav">
+      <button onclick="navigate('dashboard')" data-page="dashboard"><span class="nav-icon">🏠</span>Painel</button>
+      <button onclick="navigate('calendar')" data-page="calendar"><span class="nav-icon">📅</span>Calendário</button>
+      <button onclick="navigate('register')" data-page="register"><span class="nav-icon">✏️</span>Registrar</button>
+      <button onclick="navigate('insights')" data-page="insights"><span class="nav-icon">📊</span>Análises</button>
+      <button onclick="navigate('settings')" data-page="settings"><span class="nav-icon">⚙️</span>Configurações</button>
+    </nav>
+  </aside>
+
+  <!-- Main content -->
+  <div class="main">
+    <header class="topbar">
+      <h2 id="topTitle">Painel</h2>
+      <div class="topbar-actions">
+        <button onclick="navigate('register')" title="Registrar">✏️</button>
+        <div class="sync-indicator" id="syncIndicator" onclick="toggleSyncTooltip()">
+          ☁️
+          <span class="sync-dot offline" id="syncDot"></span>
+          <div class="sync-tooltip" id="syncTooltip">
+            <div class="sync-status-text" id="syncTooltipStatus">Sync desativado</div>
+            <div class="sync-last" id="syncTooltipLast"></div>
+            <div class="sync-actions">
+              <button class="setting-btn outline" style="padding:4px 10px;font-size:.75rem" onclick="event.stopPropagation();forceSyncNow()">Sincronizar</button>
+            </div>
+          </div>
+        </div>
+        <div class="topbar-profile" id="topbarProfile" onclick="toggleProfileDropdown()">
+          <span class="tp-avatar" id="topbarAvatar"></span>
+          <span class="tp-name" id="topbarName"></span>
+          <span class="tp-arrow">▼</span>
+          <div class="profile-dropdown" id="profileDropdown">
+            <button onclick="event.stopPropagation();switchProfile()">🔄 Trocar perfil</button>
+            <button onclick="event.stopPropagation();navigate('settings');closeProfileDropdown()">⚙️ Configurações</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- Install banner -->
+      <div class="install-banner" id="installBanner">
+        <p>Instale o MeuCiclo para acesso rápido</p>
+        <button onclick="installPWA()">Instalar</button>
+        <button class="close-banner" onclick="this.parentElement.classList.remove('show')">&times;</button>
+      </div>
+
+      <!-- ===== PAGE: DASHBOARD ===== -->
+      <div class="page active" id="page-dashboard">
+        <div class="card" style="text-align:center">
+          <div class="cycle-ring">
+            <svg viewBox="0 0 120 120">
+              <circle class="track" cx="60" cy="60" r="52"/>
+              <circle class="progress" id="ringProgress" cx="60" cy="60" r="52" stroke="var(--primary)" stroke-dasharray="327" stroke-dashoffset="327"/>
+            </svg>
+            <div class="cycle-ring-info">
+              <div class="day-num" id="dashDay">-</div>
+              <div class="day-label" id="dashDayLabel">Sem dados</div>
+            </div>
+          </div>
+          <div class="phase-badge" id="dashPhase">Registre sua primeira menstruação</div>
+          <div class="countdown" id="dashCountdown"></div>
+        </div>
+
+        <div class="quick-actions">
+          <button class="quick-btn" onclick="startPeriodQuick()"><span class="qicon">🩸</span>Iniciar menstruação</button>
+          <button class="quick-btn" onclick="navigate('register')"><span class="qicon">📝</span>Registrar sintomas</button>
+          <button class="quick-btn" onclick="endPeriodQuick()"><span class="qicon">✅</span>Encerrar menstruação</button>
+          <button class="quick-btn" onclick="navigate('calendar')"><span class="qicon">📅</span>Ver calendário</button>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h3>Este mês</h3></div>
+          <div class="mini-cal" id="miniCal"></div>
+        </div>
+      </div>
+
+      <!-- ===== PAGE: CALENDAR ===== -->
+      <div class="page" id="page-calendar">
+        <div class="card">
+          <div class="cal-header">
+            <button class="cal-nav" onclick="calPrev()">&#8249;</button>
+            <h3 id="calTitle"></h3>
+            <button class="cal-nav" onclick="calNext()">&#8250;</button>
+          </div>
+          <div class="cal-grid" id="calGrid"></div>
+          <div class="cal-legend">
+            <div class="cal-legend-item"><span class="dot" style="background:var(--menstrual)"></span>Menstruação</div>
+            <div class="cal-legend-item"><span class="dot" style="background:var(--fertile)"></span>Fértil</div>
+            <div class="cal-legend-item"><span class="dot" style="background:var(--ovulation)"></span>Ovulação</div>
+            <div class="cal-legend-item"><span class="dot" style="background:var(--safe)"></span>Seguro</div>
+            <div class="cal-legend-item"><span class="dot" style="background:var(--luteal)"></span>Lútea/TPM</div>
+          </div>
+        </div>
+        <div id="dayDetailPanel"></div>
+      </div>
+
+      <!-- ===== PAGE: REGISTER ===== -->
+      <div class="page" id="page-register">
+        <div class="card">
+          <div class="register-date">
+            <label style="font-weight:600">Data:</label>
+            <input type="date" id="regDate">
+          </div>
+
+          <div class="register-section">
+            <h3>🩸 Fluxo menstrual</h3>
+            <div class="flow-options">
+              <button class="flow-btn" data-flow="none" onclick="setFlow(this)"><span class="flow-icon">⚪</span>Nenhum</button>
+              <button class="flow-btn" data-flow="spotting" onclick="setFlow(this)"><span class="flow-icon">🔸</span>Escape</button>
+              <button class="flow-btn" data-flow="light" onclick="setFlow(this)"><span class="flow-icon">💧</span>Leve</button>
+              <button class="flow-btn" data-flow="moderate" onclick="setFlow(this)"><span class="flow-icon">💧💧</span>Moderado</button>
+              <button class="flow-btn" data-flow="heavy" onclick="setFlow(this)"><span class="flow-icon">💧💧💧</span>Intenso</button>
+            </div>
+          </div>
+
+          <div class="register-section">
+            <h3>🤕 Sintomas</h3>
+            <div class="symptom-chips" id="symptomChips"></div>
+          </div>
+
+          <div class="register-section">
+            <h3>😊 Humor</h3>
+            <div class="mood-chips" id="moodChips"></div>
+          </div>
+
+          <div class="register-section">
+            <h3>⚡ Energia</h3>
+            <div class="energy-slider">
+              <input type="range" id="regEnergy" min="1" max="5" value="3">
+            </div>
+            <div class="energy-labels"><span>Baixa</span><span>Normal</span><span>Alta</span></div>
+          </div>
+
+          <div class="register-section">
+            <h3>💦 Muco cervical</h3>
+            <div class="mucus-chips" id="mucusChips"></div>
+          </div>
+
+          <div class="register-section">
+            <h3>💑 Atividade sexual</h3>
+            <div class="sex-options">
+              <button class="sex-btn" data-sex="none" onclick="setSex(this)">Nenhuma</button>
+              <button class="sex-btn" data-sex="protected" onclick="setSex(this)">Protegida</button>
+              <button class="sex-btn" data-sex="unprotected" onclick="setSex(this)">Desprotegida</button>
+            </div>
+          </div>
+
+          <div class="register-section register-notes">
+            <h3>📝 Notas</h3>
+            <textarea id="regNotes" placeholder="Escreva algo sobre o seu dia..."></textarea>
+          </div>
+
+          <button class="save-btn" onclick="saveLog()">Salvar registro</button>
+        </div>
+      </div>
+
+      <!-- ===== PAGE: INSIGHTS ===== -->
+      <div class="page" id="page-insights">
+        <div class="stats-grid" id="statsGrid"></div>
+
+        <div class="chart-container">
+          <h3>Duração dos ciclos</h3>
+          <canvas id="chartCycles"></canvas>
+        </div>
+
+        <div class="chart-container">
+          <h3>Sintomas mais frequentes</h3>
+          <div id="symptomPatterns"></div>
+        </div>
+
+        <div class="card year-overview">
+          <h3>Visão anual</h3>
+          <div class="year-months" id="yearOverview"></div>
+        </div>
+      </div>
+
+      <!-- ===== PAGE: SETTINGS ===== -->
+      <div class="page" id="page-settings">
+        <div class="card">
+          <div class="setting-group">
+            <h3>Perfis</h3>
+            <p style="font-size:.8rem;color:var(--text-secondary);margin-bottom:12px;line-height:1.4">Ambos os perfis compartilham os mesmos dados do ciclo neste aparelho. Cada registro mostra quem o fez.</p>
+            <div id="profileSettingsList"></div>
+            <div class="setting-actions" style="margin-top:8px">
+              <button class="setting-btn outline" id="addPartnerBtn" onclick="showCreateProfileModal(false)">Adicionar parceiro(a)</button>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>Ciclo</h3>
+            <div class="setting-row">
+              <div class="setting-label">Duração padrão do ciclo<small>21 a 35 dias</small></div>
+              <div class="setting-control"><input type="number" id="setCycleLen" min="21" max="35" value="28"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">Duração da menstruação<small>2 a 8 dias</small></div>
+              <div class="setting-control"><input type="number" id="setPeriodLen" min="2" max="8" value="5"></div>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>Lembretes</h3>
+            <div class="setting-row">
+              <div class="setting-label">Avisar antes do período<small>Dias de antecedência</small></div>
+              <div class="setting-control"><input type="number" id="setReminderDays" min="0" max="7" value="2"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">Lembrete janela fértil</div>
+              <div class="setting-control"><div class="toggle" id="togFertile" onclick="toggleSetting(this)"></div></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">Lembrete diário<small>Para registrar sintomas</small></div>
+              <div class="setting-control"><div class="toggle" id="togDaily" onclick="toggleSetting(this)"></div></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">Horário do lembrete</div>
+              <div class="setting-control"><input type="time" id="setReminderTime" value="20:00"></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">Ativar notificações</div>
+              <div class="setting-control"><button class="setting-btn primary" onclick="requestNotifPermission()">Permitir</button></div>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>Privacidade</h3>
+            <div class="setting-row">
+              <div class="setting-label">PIN do meu perfil<small>Proteja seu acesso</small></div>
+              <div class="setting-control"><button class="setting-btn outline" id="pinSettingBtn" onclick="setupPin()">Configurar</button></div>
+            </div>
+          </div>
+
+          <div class="setting-group" id="syncSettingsGroup">
+            <h3>Sincronização</h3>
+            <div id="syncSettingsContent">
+              <div class="sync-setup-box">
+                <p>Sincronize os dados entre aparelhos com criptografia de ponta a ponta. O Firebase nunca vê seus dados legíveis.</p>
+                <button class="setting-btn primary" onclick="showSyncSetupModal()">Configurar</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>Dados</h3>
+            <div class="setting-actions">
+              <button class="setting-btn outline" onclick="exportData()">Exportar JSON</button>
+              <button class="setting-btn outline" onclick="document.getElementById('importFile').click()">Importar JSON</button>
+              <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+              <button class="setting-btn danger" onclick="clearAllData()">Limpar tudo</button>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>Instalar</h3>
+            <div class="setting-row">
+              <div class="setting-label">Instalar como aplicativo<small>Acesso rápido e offline</small></div>
+              <div class="setting-control"><button class="setting-btn primary" id="settingsInstallBtn" onclick="installPWA()">Instalar</button></div>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>Sobre</h3>
+            <div class="disclaimer-box">
+              <strong>Aviso médico:</strong> O MeuCiclo é uma ferramenta de acompanhamento e NÃO substitui orientação médica. As previsões são estimativas baseadas em médias e podem variar. NÃO use este app como método contraceptivo único. Consulte sempre um profissional de saúde.
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">Versão</div>
+              <div class="setting-control" style="font-size:.85rem;color:var(--text-secondary)">1.2.0</div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">Privacidade</div>
+              <div class="setting-control" style="font-size:.85rem;color:var(--text-secondary)">Local + sync criptografado</div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">Desenvolvedor</div>
+              <div class="setting-control" style="font-size:.85rem;color:var(--text-secondary)">Fellipe Santos</div>
+            </div>
+            <div style="text-align:center;padding:16px 0 8px;font-size:.75rem;color:var(--text-light);line-height:1.6">
+              &copy; 2025–2026 Fellipe Santos. Todos os direitos reservados.<br>
+              Este software e seu código-fonte são propriedade exclusiva do autor.<br>
+              Reprodução, distribuição ou uso não autorizado é proibido.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+
+    <!-- Bottom nav (mobile) -->
+    <nav class="bottom-nav">
+      <button onclick="navigate('dashboard')" data-page="dashboard"><span class="nav-icon">🏠</span>Painel</button>
+      <button onclick="navigate('calendar')" data-page="calendar"><span class="nav-icon">📅</span>Calendário</button>
+      <button onclick="navigate('register')" data-page="register"><span class="nav-icon">✏️</span>Registrar</button>
+      <button onclick="navigate('insights')" data-page="insights"><span class="nav-icon">📊</span>Análises</button>
+      <button onclick="navigate('settings')" data-page="settings"><span class="nav-icon">⚙️</span>Config</button>
+    </nav>
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+/* ================================================================
+   MeuCiclo — Controle de Ciclo Menstrual
+   Toda lógica em um único arquivo. Dados no LocalStorage.
+   ================================================================ */
+
+// ── Storage Keys ──
+const KEYS = {
+  cycles: 'meuciclo_cycles',
+  logs: 'meuciclo_logs',
+  settings: 'meuciclo_settings',
+  onboarded: 'meuciclo_onboarded',
+  pin: 'meuciclo_pin',
+  profiles: 'meuciclo_profiles',
+  currentProfile: 'meuciclo_current_profile',
+  syncEnabled: 'meuciclo_sync_enabled',
+  syncRoom: 'meuciclo_sync_room',
+  syncKey: 'meuciclo_sync_key',
+  syncVersion: 'meuciclo_sync_version'
+};
+
+// ── Symptom / Mood / Mucus definitions ──
+const SYMPTOMS = [
+  { id: 'cramps', label: 'Cólica', icon: '🔥' },
+  { id: 'headache', label: 'Dor de cabeça', icon: '🤕' },
+  { id: 'bloating', label: 'Inchaço', icon: '🎈' },
+  { id: 'breast_tenderness', label: 'Sensib. seios', icon: '💗' },
+  { id: 'acne', label: 'Acne', icon: '😖' },
+  { id: 'back_pain', label: 'Dor costas', icon: '🔙' },
+  { id: 'fatigue', label: 'Fadiga', icon: '😴' },
+  { id: 'nausea', label: 'Náusea', icon: '🤢' },
+  { id: 'cravings', label: 'Desejo alimentar', icon: '🍫' },
+  { id: 'insomnia', label: 'Insônia', icon: '🌙' },
+  { id: 'dizziness', label: 'Tontura', icon: '💫' }
+];
+const MOODS = [
+  { id: 'happy', label: 'Feliz', icon: '😊' },
+  { id: 'sad', label: 'Triste', icon: '😢' },
+  { id: 'irritable', label: 'Irritada', icon: '😠' },
+  { id: 'anxious', label: 'Ansiosa', icon: '😰' },
+  { id: 'tired', label: 'Cansada', icon: '😴' },
+  { id: 'loving', label: 'Amorosa', icon: '🥰' },
+  { id: 'normal', label: 'Normal', icon: '😐' },
+  { id: 'stressed', label: 'Estressada', icon: '🤯' }
+];
+const MUCUS_TYPES = [
+  { id: 'dry', label: 'Seco', icon: '⚪' },
+  { id: 'sticky', label: 'Pegajoso', icon: '🟡' },
+  { id: 'creamy', label: 'Cremoso', icon: '🟠' },
+  { id: 'egg_white', label: 'Clara de ovo', icon: '🥚' },
+  { id: 'watery', label: 'Aquoso', icon: '💧' }
+];
+const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DAY_ABBR = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+const PAGE_TITLES = { dashboard:'Painel', calendar:'Calendário', register:'Registrar', insights:'Análises', settings:'Configurações' };
+
+// ── Avatar options ──
+const AVATARS = ['🌸','🌺','🦋','💜','💙','🌿','🌙','⭐','🔥','💛'];
+
+// ── State ──
+let cycles = [];
+let logs = [];
+let settings = {};
+let profiles = [];
+let currentProfile = null;
+let calYear, calMonth, selectedDate = null;
+let currentPage = 'dashboard';
+let deferredInstallPrompt = null;
+let chartInstance = null;
+
+// ── Sync State ──
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyD723jbwzLT_4-1mTsBYXFwfTOUl_5CJYY",
+  authDomain: "meuciclo-8a8c0.firebaseapp.com",
+  databaseURL: "https://meuciclo-8a8c0-default-rtdb.firebaseio.com",
+  projectId: "meuciclo-8a8c0"
+};
+let syncState = { enabled: false, syncing: false, lastSync: null, error: null };
+let firebaseApp = null, firebaseAuth = null, firebaseDb = null, syncListener = null;
+let pushDebounceTimer = null;
+const SYNC_KEYS = [KEYS.cycles, KEYS.logs, KEYS.settings, KEYS.profiles];
+
+// ── Helpers ──
+function load(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { return fallback; } }
+function save(key, val) {
+  localStorage.setItem(key, JSON.stringify(val));
+  if (syncState.enabled && SYNC_KEYS.includes(key)) debouncedPush();
+}
+function today() { return fmtDate(new Date()); }
+function fmtDate(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function parseDate(s) { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
+function addDays(s, n) { const d = parseDate(s); d.setDate(d.getDate() + n); return fmtDate(d); }
+function diffDays(a, b) { return Math.round((parseDate(a) - parseDate(b)) / 86400000); }
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+// ── Init ──
+function init() {
+  cycles = load(KEYS.cycles, []);
+  logs = load(KEYS.logs, []);
+  settings = Object.assign({
+    defaultCycleLength: 28, defaultPeriodLength: 5,
+    reminderPeriodDays: 2, reminderFertile: true,
+    reminderDaily: false, reminderDailyTime: '20:00'
+  }, load(KEYS.settings, {}));
+
+  // Remove old pin from settings if migrating
+  if (settings.pin !== undefined) delete settings.pin;
+
+  loadProfiles();
+  migrateOldData();
+
+  if (profiles.length === 0) {
+    // Nenhum perfil — criar o primeiro (titular obrigatório)
+    showCreateProfileModal(true);
+  } else if (profiles.length === 1 && !profiles[0].pin) {
+    // Perfil único sem PIN — entra direto
+    activateProfile(profiles[0]);
+  } else {
+    // Tentar restaurar sessão anterior
+    const lastId = localStorage.getItem(KEYS.currentProfile);
+    const lastProfile = lastId ? profiles.find(p => p.id === lastId) : null;
+    if (lastProfile && !lastProfile.pin) {
+      // Sessão anterior sem PIN — entra direto
+      activateProfile(lastProfile);
+    } else {
+      // Mostra tela de seleção
+      showLoginScreen();
+    }
+  }
+}
+
+// ── Profile Management ──
+function loadProfiles() {
+  profiles = load(KEYS.profiles, []);
+}
+
+function saveProfiles() {
+  save(KEYS.profiles, profiles);
+}
+
+function showLoginScreen() {
+  document.getElementById('loginScreen').style.display = '';
+  document.getElementById('pinScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'none';
+
+  const cardsEl = document.getElementById('profileCards');
+  const actionsEl = document.getElementById('loginActions');
+
+  cardsEl.innerHTML = profiles.map(p => `
+    <div class="profile-card" onclick="loginAs('${p.id}')">
+      <span class="profile-avatar">${p.avatar}</span>
+      <span class="profile-name">${p.name}</span>
+      <span class="profile-role">${p.role === 'titular' ? 'Titular' : 'Parceiro(a)'}</span>
+      ${p.pin ? '<span class="profile-pin-icon">🔒 PIN</span>' : ''}
+    </div>
+  `).join('');
+
+  let actionsHtml = '';
+  if (profiles.length < 2) {
+    actionsHtml += '<button onclick="showCreateProfileModal(false)">+ Adicionar parceiro(a)</button>';
+  }
+  actionsHtml += '<button onclick="showManageProfilesFromLogin()" style="font-size:.75rem;color:var(--text-light)">Gerenciar perfis</button>';
+  actionsEl.innerHTML = actionsHtml;
+}
+
+function loginAs(profileId) {
+  const profile = profiles.find(p => p.id === profileId);
+  if (!profile) return;
+
+  if (profile.pin) {
+    showPinScreenForProfile(profile);
+    return;
+  }
+
+  activateProfile(profile);
+}
+
+function activateProfile(profile) {
+  currentProfile = profile;
+  localStorage.setItem(KEYS.currentProfile, profile.id);
+  showApp();
+}
+
+function switchProfile() {
+  closeProfileDropdown();
+  if (profiles.length <= 1) {
+    toast('Adicione um(a) parceiro(a) nas configurações para trocar de perfil');
+    return;
+  }
+  currentProfile = null;
+  localStorage.removeItem(KEYS.currentProfile);
+  showLoginScreen();
+}
+
+function getCurrentProfileName() {
+  return currentProfile ? currentProfile.name : 'Usuário';
+}
+
+function getProfileNameById(id) {
+  if (!id) return null;
+  const p = profiles.find(pr => pr.id === id);
+  return p ? p.name : null;
+}
+
+function createProfile(name, role, avatar, pin) {
+  const profile = {
+    id: 'prof_' + Date.now(),
+    name: name,
+    role: role,
+    avatar: avatar,
+    pin: pin || null,
+    createdAt: today(),
+    lastModified: Date.now()
+  };
+  profiles.push(profile);
+  saveProfiles();
+  return profile;
+}
+
+function showCreateProfileModal(isFirst) {
+  // Hide login screen if showing
+  document.getElementById('loginScreen').style.display = 'none';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'createProfileOverlay';
+
+  const defaultRole = isFirst ? 'titular' : 'parceiro';
+  const title = isFirst ? 'Criar seu perfil' : 'Adicionar parceiro(a)';
+  const showRoleSelector = isFirst;
+
+  overlay.innerHTML = `<div class="modal center">
+    <div style="text-align:center;font-size:2.4rem;margin-bottom:8px">🌸</div>
+    <h2 style="text-align:center">${title}</h2>
+    ${isFirst ? '<p style="text-align:center">Bem-vinda ao MeuCiclo! Crie seu perfil para começar.</p>' : '<p style="text-align:center">Adicione o perfil do(a) parceiro(a).</p>'}
+    <label>Nome</label>
+    <input type="text" id="profileNameInput" placeholder="Seu nome" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:1rem;margin-bottom:12px">
+    ${showRoleSelector ? `<label>Papel</label>
+    <div class="role-options">
+      <button class="role-btn active" data-role="titular" onclick="selectRole(this)">Sou a titular</button>
+      <button class="role-btn" data-role="parceiro" onclick="selectRole(this)">Sou parceiro(a)</button>
+    </div>` : `<input type="hidden" id="profileRoleInput" value="${defaultRole}">`}
+    <label>Avatar</label>
+    <div class="avatar-grid" id="avatarGrid">
+      ${AVATARS.map((a, i) => `<button onclick="selectAvatar(this)" data-avatar="${a}" ${i === 0 ? 'class="active"' : ''}>${a}</button>`).join('')}
+    </div>
+    <label>PIN (opcional — 4 dígitos)</label>
+    <input type="password" id="profilePinInput" placeholder="Deixe vazio para não usar" maxlength="4" pattern="[0-9]*" inputmode="numeric" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:1rem;margin-bottom:16px">
+    ${isFirst ? `
+    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px">
+      <label>Quando começou sua última menstruação?</label>
+      <input type="date" id="onboardDate" max="${today()}" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:1rem;margin-bottom:12px">
+      <label>Ela já terminou?</label>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="sex-btn" id="onbEndYes" onclick="this.classList.add('active');document.getElementById('onbEndNo').classList.remove('active');document.getElementById('onbEndDateWrap').style.display=''">Sim</button>
+        <button class="sex-btn active" id="onbEndNo" onclick="this.classList.add('active');document.getElementById('onbEndYes').classList.remove('active');document.getElementById('onbEndDateWrap').style.display='none'">Não / Não sei</button>
+      </div>
+      <div id="onbEndDateWrap" style="display:none">
+        <label>Quando terminou?</label>
+        <input type="date" id="onboardEndDate" max="${today()}" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:1rem;margin-bottom:12px">
+      </div>
+    </div>
+    <div class="disclaimer-box" style="margin-bottom:16px">
+      <strong>Aviso:</strong> O MeuCiclo é uma ferramenta de acompanhamento e NÃO substitui orientação médica. NÃO use como método contraceptivo único.
+    </div>` : ''}
+    <div class="modal-actions">
+      ${isFirst ? '<button class="detail-btn outline" onclick="skipProfileCreation()">Pular</button>' : '<button class="detail-btn outline" onclick="cancelProfileCreation()">Cancelar</button>'}
+      <button class="save-btn" style="width:auto;padding:12px 24px" onclick="confirmCreateProfile(${isFirst})">Criar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  // Focus name input
+  setTimeout(() => document.getElementById('profileNameInput').focus(), 300);
+}
+
+function selectRole(btn) {
+  document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function selectAvatar(btn) {
+  document.querySelectorAll('.avatar-grid button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function confirmCreateProfile(isFirst) {
+  const name = document.getElementById('profileNameInput').value.trim();
+  if (!name) { toast('Digite um nome'); return; }
+
+  const roleEl = document.querySelector('.role-btn.active') || document.getElementById('profileRoleInput');
+  const role = roleEl ? (roleEl.dataset ? roleEl.dataset.role : roleEl.value) : 'titular';
+
+  const avatarBtn = document.querySelector('.avatar-grid button.active');
+  const avatar = avatarBtn ? avatarBtn.dataset.avatar : '🌸';
+
+  const pinVal = document.getElementById('profilePinInput').value.trim();
+  if (pinVal && (pinVal.length !== 4 || !/^\d+$/.test(pinVal))) { toast('PIN deve ter 4 dígitos numéricos'); return; }
+
+  const profile = createProfile(name, role, avatar, pinVal || null);
+
+  if (isFirst) {
+    // Also handle onboarding cycle data
+    const dateInput = document.getElementById('onboardDate');
+    if (dateInput && dateInput.value) {
+      const endDate = document.getElementById('onbEndYes') && document.getElementById('onbEndYes').classList.contains('active')
+        ? (document.getElementById('onboardEndDate').value || null)
+        : null;
+      const cycle = {
+        id: 'cycle_' + Date.now(),
+        startDate: dateInput.value,
+        endDate: endDate,
+        cycleLength: null,
+        periodLength: endDate ? diffDays(endDate, dateInput.value) + 1 : null,
+        registeredBy: profile.id,
+        lastModified: Date.now()
+      };
+      cycles.push(cycle);
+      save(KEYS.cycles, cycles);
+    }
+    localStorage.setItem(KEYS.onboarded, '1');
+  }
+
+  // Remove modal
+  const overlay = document.getElementById('createProfileOverlay');
+  if (overlay) overlay.remove();
+
+  activateProfile(profile);
+}
+
+function skipProfileCreation() {
+  // Create default profile
+  const profile = createProfile('Meu perfil', 'titular', '🌸', null);
+  localStorage.setItem(KEYS.onboarded, '1');
+  const overlay = document.getElementById('createProfileOverlay');
+  if (overlay) overlay.remove();
+  activateProfile(profile);
+}
+
+function cancelProfileCreation() {
+  const overlay = document.getElementById('createProfileOverlay');
+  if (overlay) overlay.remove();
+  showLoginScreen();
+}
+
+function showManageProfilesFromLogin() {
+  // Activate first profile without PIN check temporarily, then go to settings
+  const firstProfile = profiles[0];
+  if (!firstProfile) return;
+  currentProfile = firstProfile;
+  localStorage.setItem(KEYS.currentProfile, firstProfile.id);
+  showApp();
+  navigate('settings');
+}
+
+function toggleProfileDropdown() {
+  const dd = document.getElementById('profileDropdown');
+  dd.classList.toggle('show');
+}
+
+function closeProfileDropdown() {
+  const dd = document.getElementById('profileDropdown');
+  if (dd) dd.classList.remove('show');
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.topbar-profile')) {
+    closeProfileDropdown();
+  }
+});
+
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('pinScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = '';
+  const now = new Date();
+  calYear = now.getFullYear();
+  calMonth = now.getMonth();
+
+  // Update profile display in topbar and sidebar
+  if (currentProfile) {
+    document.getElementById('topbarAvatar').textContent = currentProfile.avatar;
+    document.getElementById('topbarName').textContent = currentProfile.name;
+    document.getElementById('sidebarAvatar').textContent = currentProfile.avatar;
+    document.getElementById('sidebarName').textContent = currentProfile.name;
+    document.getElementById('sidebarRole').textContent = currentProfile.role === 'titular' ? 'Titular' : 'Parceiro(a)';
+  }
+
+  buildSymptomChips();
+  buildMoodChips();
+  buildMucusChips();
+  loadSettingsUI();
+
+  if (!localStorage.getItem(KEYS.onboarded) && cycles.length === 0) {
+    showOnboarding();
+  } else {
+    navigate('dashboard');
+  }
+
+  checkNotificationSchedule();
+  maybeAutoInitSync();
+  handleInviteLinkOnInit();
+}
+
+// ── Navigation ──
+function navigate(page) {
+  currentPage = page;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const el = document.getElementById('page-' + page);
+  if (el) el.classList.add('active');
+  document.getElementById('topTitle').textContent = PAGE_TITLES[page] || '';
+  document.querySelectorAll('[data-page]').forEach(b => {
+    b.classList.toggle('active', b.dataset.page === page);
+  });
+  if (page === 'dashboard') renderDashboard();
+  if (page === 'calendar') renderCalendar();
+  if (page === 'register') prepareRegister();
+  if (page === 'insights') renderInsights();
+  document.querySelector('.content').scrollTop = 0;
+}
+
+// ── Cycle Algorithm ──
+function getAvgCycleLength() {
+  const completed = cycles.filter(c => c.cycleLength);
+  if (completed.length === 0) return settings.defaultCycleLength;
+  const recent = completed.slice(-6);
+  return Math.round(recent.reduce((s, c) => s + c.cycleLength, 0) / recent.length);
+}
+
+function getAvgPeriodLength() {
+  if (cycles.length === 0) return settings.defaultPeriodLength;
+  const recent = cycles.slice(-6);
+  return Math.round(recent.reduce((s, c) => s + (c.periodLength || settings.defaultPeriodLength), 0) / recent.length);
+}
+
+function getLastCycle() {
+  return cycles.length ? cycles[cycles.length - 1] : null;
+}
+
+function getPhaseForDate(dateStr) {
+  const last = getLastCycle();
+  if (!last) return { phase: 'unknown', day: 0, icon: '', label: 'Sem dados', cssClass: '' };
+
+  const avgCycle = getAvgCycleLength();
+  const avgPeriod = getAvgPeriodLength();
+  const dayOfCycle = diffDays(dateStr, last.startDate) + 1;
+
+  // If before start, check previous cycles
+  if (dayOfCycle < 1) return { phase: 'unknown', day: 0, icon: '', label: 'Sem dados', cssClass: '' };
+
+  // Period phase
+  const periodEnd = last.endDate ? diffDays(last.endDate, last.startDate) + 1 : avgPeriod;
+  if (dayOfCycle <= periodEnd) {
+    return { phase: 'menstrual', day: dayOfCycle, icon: '🩸', label: 'Menstruação', cssClass: 'phase-menstrual', total: avgCycle };
+  }
+
+  const ovulationDay = avgCycle - 14;
+  const fertileStart = ovulationDay - 5;
+  const fertileEnd = ovulationDay + 1;
+
+  if (dayOfCycle >= fertileStart && dayOfCycle <= fertileEnd) {
+    if (dayOfCycle === ovulationDay) {
+      return { phase: 'ovulation', day: dayOfCycle, icon: '🌸', label: 'Ovulação', cssClass: 'phase-ovulation', total: avgCycle };
+    }
+    return { phase: 'fertile', day: dayOfCycle, icon: '🌱', label: 'Janela fértil', cssClass: 'phase-fertile', total: avgCycle };
+  }
+
+  if (dayOfCycle > fertileEnd && dayOfCycle <= avgCycle) {
+    return { phase: 'luteal', day: dayOfCycle, icon: '☁️', label: 'Fase lútea', cssClass: 'phase-luteal', total: avgCycle };
+  }
+
+  if (dayOfCycle > periodEnd && dayOfCycle < fertileStart) {
+    return { phase: 'safe', day: dayOfCycle, icon: '💚', label: 'Período seguro', cssClass: 'phase-safe', total: avgCycle };
+  }
+
+  // Beyond cycle length — predicted next period
+  const dayInNext = ((dayOfCycle - 1) % avgCycle) + 1;
+  if (dayInNext <= avgPeriod) {
+    return { phase: 'menstrual', day: dayInNext, icon: '🔮', label: 'Previsão menstruação', cssClass: 'phase-menstrual', predicted: true, total: avgCycle };
+  }
+  const ovDay2 = avgCycle - 14;
+  const fStart2 = ovDay2 - 5;
+  const fEnd2 = ovDay2 + 1;
+  if (dayInNext >= fStart2 && dayInNext <= fEnd2) {
+    if (dayInNext === ovDay2) return { phase: 'ovulation', day: dayInNext, icon: '🔮', label: 'Previsão ovulação', cssClass: 'phase-ovulation', predicted: true, total: avgCycle };
+    return { phase: 'fertile', day: dayInNext, icon: '🔮', label: 'Previsão fértil', cssClass: 'phase-fertile', predicted: true, total: avgCycle };
+  }
+  if (dayInNext > fEnd2) {
+    return { phase: 'luteal', day: dayInNext, icon: '☁️', label: 'Previsão lútea', cssClass: 'phase-luteal', predicted: true, total: avgCycle };
+  }
+  return { phase: 'safe', day: dayInNext, icon: '💚', label: 'Previsão seguro', cssClass: 'phase-safe', predicted: true, total: avgCycle };
+}
+
+function getDaysUntilNextPeriod() {
+  const last = getLastCycle();
+  if (!last) return null;
+  const avg = getAvgCycleLength();
+  const nextStart = addDays(last.startDate, avg);
+  const d = diffDays(nextStart, today());
+  return d;
+}
+
+function isInCurrentPeriod(dateStr) {
+  const last = getLastCycle();
+  if (!last) return false;
+  if (!last.endDate) {
+    // Period still ongoing — check if within avgPeriod from start
+    const day = diffDays(dateStr, last.startDate);
+    return day >= 0 && day < getAvgPeriodLength();
+  }
+  return dateStr >= last.startDate && dateStr <= last.endDate;
+}
+
+// ── Dashboard ──
+function renderDashboard() {
+  const last = getLastCycle();
+  const ring = document.getElementById('ringProgress');
+  const dayNum = document.getElementById('dashDay');
+  const dayLabel = document.getElementById('dashDayLabel');
+  const phaseBadge = document.getElementById('dashPhase');
+  const countdown = document.getElementById('dashCountdown');
+
+  if (!last) {
+    dayNum.textContent = '-';
+    dayLabel.textContent = 'Sem dados';
+    phaseBadge.className = 'phase-badge';
+    phaseBadge.textContent = 'Registre sua primeira menstruação';
+    countdown.textContent = '';
+    ring.style.strokeDashoffset = '327';
+  } else {
+    const info = getPhaseForDate(today());
+    const avg = getAvgCycleLength();
+    const currentDay = clamp(info.day, 1, avg);
+    const pct = currentDay / avg;
+    ring.style.strokeDashoffset = String(327 - (327 * pct));
+    ring.style.stroke = getPhaseColor(info.phase);
+
+    dayNum.textContent = currentDay;
+    dayLabel.textContent = 'Dia ' + currentDay + ' de ' + avg;
+    phaseBadge.className = 'phase-badge ' + info.cssClass;
+    phaseBadge.textContent = info.icon + ' ' + info.label;
+
+    const daysUntil = getDaysUntilNextPeriod();
+    if (daysUntil !== null) {
+      if (daysUntil > 0) countdown.textContent = 'Próxima menstruação em ' + daysUntil + ' dia' + (daysUntil > 1 ? 's' : '');
+      else if (daysUntil === 0) countdown.textContent = 'Menstruação prevista para hoje';
+      else countdown.textContent = 'Menstruação atrasada ' + Math.abs(daysUntil) + ' dia' + (Math.abs(daysUntil) > 1 ? 's' : '');
+    } else {
+      countdown.textContent = '';
+    }
+  }
+
+  renderMiniCal();
+}
+
+function getPhaseColor(phase) {
+  const map = { menstrual: 'var(--menstrual)', fertile: 'var(--fertile)', ovulation: 'var(--ovulation)', safe: 'var(--safe)', luteal: 'var(--luteal)' };
+  return map[phase] || 'var(--primary)';
+}
+
+function renderMiniCal() {
+  const el = document.getElementById('miniCal');
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  let html = DAY_ABBR.map(d => `<div class="day-header">${d.charAt(0)}</div>`).join('');
+  const first = new Date(y, m, 1).getDay();
+  const dim = new Date(y, m + 1, 0).getDate();
+  for (let i = 0; i < first; i++) html += '<div class="day-cell empty"></div>';
+  for (let d = 1; d <= dim; d++) {
+    const ds = fmtDate(new Date(y, m, d));
+    const info = getPhaseForDate(ds);
+    const isToday = ds === today();
+    let bg = '';
+    if (info.phase !== 'unknown') bg = `background:${getPhaseColor(info.phase)};color:#fff;`;
+    if (info.predicted) bg += 'opacity:.5;';
+    html += `<div class="day-cell${isToday ? ' today' : ''}" style="${bg}">${d}</div>`;
+  }
+  el.innerHTML = html;
+}
+
+// ── Calendar ──
+function renderCalendar() {
+  const title = document.getElementById('calTitle');
+  const grid = document.getElementById('calGrid');
+  title.textContent = MONTH_NAMES[calMonth] + ' ' + calYear;
+
+  let html = DAY_ABBR.map(d => `<div class="day-header">${d}</div>`).join('');
+  const first = new Date(calYear, calMonth, 1).getDay();
+  const dim = new Date(calYear, calMonth + 1, 0).getDate();
+
+  for (let i = 0; i < first; i++) html += '<div class="cal-day empty"></div>';
+  for (let d = 1; d <= dim; d++) {
+    const ds = fmtDate(new Date(calYear, calMonth, d));
+    const info = getPhaseForDate(ds);
+    const log = logs.find(l => l.date === ds);
+    const isToday = ds === today();
+    const isSel = ds === selectedDate;
+    let cls = 'cal-day';
+    if (isToday) cls += ' today';
+    if (isSel) cls += ' selected';
+    if (info.predicted) cls += ' predicted';
+    if (log) cls += ' has-log';
+
+    let bg = '';
+    if (info.phase !== 'unknown') bg = `background:${getPhaseColor(info.phase)}22;`;
+
+    let dot = '';
+    if (info.phase !== 'unknown') dot = `<span class="phase-dot">${info.icon}</span>`;
+
+    html += `<div class="${cls}" style="${bg}" onclick="selectDay('${ds}')"><span class="day-num">${d}</span>${dot}</div>`;
+  }
+  grid.innerHTML = html;
+
+  if (selectedDate) renderDayDetail(selectedDate);
+}
+
+function calPrev() { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCalendar(); }
+function calNext() { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } renderCalendar(); }
+
+function selectDay(ds) {
+  selectedDate = selectedDate === ds ? null : ds;
+  renderCalendar();
+}
+
+function renderDayDetail(ds) {
+  const panel = document.getElementById('dayDetailPanel');
+  const info = getPhaseForDate(ds);
+  const log = logs.find(l => l.date === ds);
+  const d = parseDate(ds);
+  const dayName = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][d.getDay()];
+
+  let html = `<div class="day-detail">
+    <div class="day-detail-header">
+      <h4>${d.getDate()} de ${MONTH_NAMES[d.getMonth()]} — ${dayName}</h4>
+      <button onclick="selectedDate=null;document.getElementById('dayDetailPanel').innerHTML='';renderCalendar()" style="font-size:1.2rem">&times;</button>
+    </div>`;
+
+  if (info.phase !== 'unknown') {
+    html += `<div class="detail-phase"><span class="${info.cssClass}" style="padding:4px 10px;border-radius:12px;font-size:.8rem">${info.icon} ${info.label}</span>
+    <span style="font-size:.8rem;color:var(--text-secondary)">Dia ${info.day}${info.total ? ' de ' + info.total : ''}</span></div>`;
+  }
+
+  if (log) {
+    if (log.flow && log.flow !== 'none') {
+      const flowLabels = { spotting: 'Escape', light: 'Leve', moderate: 'Moderado', heavy: 'Intenso' };
+      html += `<p style="font-size:.85rem;margin:8px 0">🩸 Fluxo: <strong>${flowLabels[log.flow] || log.flow}</strong></p>`;
+    }
+    if (log.symptoms && log.symptoms.length) {
+      html += '<div class="detail-symptoms">';
+      log.symptoms.forEach(s => {
+        const sym = SYMPTOMS.find(x => x.id === s);
+        if (sym) html += `<span class="chip">${sym.icon} ${sym.label}</span>`;
+      });
+      html += '</div>';
+    }
+    if (log.mood) {
+      const m = MOODS.find(x => x.id === log.mood);
+      if (m) html += `<p style="font-size:.85rem;margin:8px 0">${m.icon} ${m.label}</p>`;
+    }
+    if (log.notes) {
+      html += `<p style="font-size:.82rem;color:var(--text-secondary);margin:8px 0;font-style:italic">"${log.notes}"</p>`;
+    }
+    if (log.registeredBy) {
+      const regName = getProfileNameById(log.registeredBy);
+      if (regName) html += `<p class="profile-badge">Registrado por ${regName}</p>`;
+    }
+  }
+
+  html += `<div class="detail-actions">
+    <button class="detail-btn primary" onclick="goRegister('${ds}')">Registrar</button>`;
+
+  // Check if this day is first day of a cycle
+  const cycle = cycles.find(c => c.startDate === ds);
+  if (cycle) {
+    if (!cycle.endDate) {
+      html += `<button class="detail-btn outline" onclick="endPeriodOn('${ds}')">Encerrar menstruação</button>`;
+    }
+    html += `<button class="detail-btn danger" onclick="removeCycle('${cycle.id}')">Remover ciclo</button>`;
+  } else {
+    html += `<button class="detail-btn outline" onclick="startPeriodOn('${ds}')">Iniciar menstruação</button>`;
+  }
+
+  html += '</div></div>';
+  panel.innerHTML = html;
+}
+
+function goRegister(ds) {
+  navigate('register');
+  document.getElementById('regDate').value = ds;
+  loadLogForDate(ds);
+}
+
+// ── Period Actions ──
+function startPeriodOn(dateStr) {
+  // Close any open cycle first
+  const last = getLastCycle();
+  if (last && !last.endDate && dateStr > last.startDate) {
+    last.endDate = addDays(dateStr, -1);
+    last.periodLength = diffDays(last.endDate, last.startDate) + 1;
+    if (cycles.length >= 2) {
+      const prev = cycles[cycles.length - 2];
+      if (prev.startDate) {
+        last.cycleLength = diffDays(dateStr, last.startDate);
+      }
+    }
+  }
+  // Calculate cycleLength for last cycle
+  if (last && last.startDate && !last.cycleLength) {
+    last.cycleLength = diffDays(dateStr, last.startDate);
+  }
+
+  const newCycle = {
+    id: 'cycle_' + Date.now(),
+    startDate: dateStr,
+    endDate: null,
+    cycleLength: null,
+    periodLength: null,
+    registeredBy: currentProfile ? currentProfile.id : null,
+    lastModified: Date.now()
+  };
+  cycles.push(newCycle);
+  cycles.sort((a, b) => a.startDate.localeCompare(b.startDate));
+  // Also mark closed cycle as modified
+  if (last) last.lastModified = Date.now();
+  save(KEYS.cycles, cycles);
+  toast('Menstruação registrada');
+  if (currentPage === 'calendar') { renderCalendar(); if (selectedDate) renderDayDetail(selectedDate); }
+  if (currentPage === 'dashboard') renderDashboard();
+}
+
+function endPeriodOn(dateStr) {
+  const last = getLastCycle();
+  if (!last || last.endDate) return;
+  last.endDate = dateStr;
+  last.periodLength = diffDays(dateStr, last.startDate) + 1;
+  last.lastModified = Date.now();
+  save(KEYS.cycles, cycles);
+  toast('Menstruação encerrada');
+  if (currentPage === 'calendar') { renderCalendar(); if (selectedDate) renderDayDetail(selectedDate); }
+  if (currentPage === 'dashboard') renderDashboard();
+}
+
+function removeCycle(id) {
+  if (!confirm('Remover este registro de menstruação?')) return;
+  cycles = cycles.filter(c => c.id !== id);
+  // Recalculate cycle lengths
+  const now = Date.now();
+  for (let i = 1; i < cycles.length; i++) {
+    cycles[i - 1].cycleLength = diffDays(cycles[i].startDate, cycles[i - 1].startDate);
+    cycles[i - 1].lastModified = now;
+  }
+  if (cycles.length) { cycles[cycles.length - 1].cycleLength = null; cycles[cycles.length - 1].lastModified = now; }
+  save(KEYS.cycles, cycles);
+  toast('Registro removido');
+  selectedDate = null;
+  document.getElementById('dayDetailPanel').innerHTML = '';
+  renderCalendar();
+}
+
+function startPeriodQuick() {
+  startPeriodOn(today());
+}
+
+function endPeriodQuick() {
+  const last = getLastCycle();
+  if (!last || last.endDate) { toast('Nenhuma menstruação em andamento'); return; }
+  endPeriodOn(today());
+}
+
+// ── Register Page ──
+let regFlow = 'none';
+let regSymptoms = [];
+let regMood = null;
+let regMucus = null;
+let regSex = 'none';
+
+function buildSymptomChips() {
+  const el = document.getElementById('symptomChips');
+  el.innerHTML = SYMPTOMS.map(s =>
+    `<button class="chip-btn" data-id="${s.id}" onclick="toggleSymptom(this)"><span class="chip-icon">${s.icon}</span>${s.label}</button>`
+  ).join('');
+}
+
+function buildMoodChips() {
+  const el = document.getElementById('moodChips');
+  el.innerHTML = MOODS.map(m =>
+    `<button class="mood-btn" data-id="${m.id}" onclick="selectMood(this)"><span class="mood-emoji">${m.icon}</span>${m.label}</button>`
+  ).join('');
+}
+
+function buildMucusChips() {
+  const el = document.getElementById('mucusChips');
+  el.innerHTML = MUCUS_TYPES.map(m =>
+    `<button class="chip-btn" data-id="${m.id}" onclick="selectMucus(this)"><span class="chip-icon">${m.icon}</span>${m.label}</button>`
+  ).join('');
+}
+
+function prepareRegister(dateStr) {
+  const d = dateStr || selectedDate || today();
+  document.getElementById('regDate').value = d;
+  loadLogForDate(d);
+}
+
+function loadLogForDate(ds) {
+  const log = logs.find(l => l.date === ds);
+  regFlow = log?.flow || 'none';
+  regSymptoms = log?.symptoms ? [...log.symptoms] : [];
+  regMood = log?.mood || null;
+  regMucus = log?.cervicalMucus || null;
+  regSex = log?.sexualActivity || 'none';
+  document.getElementById('regEnergy').value = log?.energy || 3;
+  document.getElementById('regNotes').value = log?.notes || '';
+
+  // Update UI
+  document.querySelectorAll('.flow-btn').forEach(b => b.classList.toggle('active', b.dataset.flow === regFlow));
+  document.querySelectorAll('#symptomChips .chip-btn').forEach(b => b.classList.toggle('active', regSymptoms.includes(b.dataset.id)));
+  document.querySelectorAll('#moodChips .mood-btn').forEach(b => b.classList.toggle('active', b.dataset.id === regMood));
+  document.querySelectorAll('#mucusChips .chip-btn').forEach(b => b.classList.toggle('active', b.dataset.id === regMucus));
+  document.querySelectorAll('.sex-btn').forEach(b => b.classList.toggle('active', b.dataset.sex === regSex));
+}
+
+document.getElementById('regDate').addEventListener('change', function() { loadLogForDate(this.value); });
+
+function setFlow(btn) {
+  regFlow = btn.dataset.flow;
+  document.querySelectorAll('.flow-btn').forEach(b => b.classList.toggle('active', b.dataset.flow === regFlow));
+}
+
+function toggleSymptom(btn) {
+  const id = btn.dataset.id;
+  const idx = regSymptoms.indexOf(id);
+  if (idx >= 0) regSymptoms.splice(idx, 1); else regSymptoms.push(id);
+  btn.classList.toggle('active');
+}
+
+function selectMood(btn) {
+  regMood = regMood === btn.dataset.id ? null : btn.dataset.id;
+  document.querySelectorAll('#moodChips .mood-btn').forEach(b => b.classList.toggle('active', b.dataset.id === regMood));
+}
+
+function selectMucus(btn) {
+  regMucus = regMucus === btn.dataset.id ? null : btn.dataset.id;
+  document.querySelectorAll('#mucusChips .chip-btn').forEach(b => b.classList.toggle('active', b.dataset.id === regMucus));
+}
+
+function setSex(btn) {
+  regSex = btn.dataset.sex;
+  document.querySelectorAll('.sex-btn').forEach(b => b.classList.toggle('active', b.dataset.sex === regSex));
+}
+
+function saveLog() {
+  const ds = document.getElementById('regDate').value;
+  if (!ds) { toast('Selecione uma data'); return; }
+
+  const entry = {
+    date: ds,
+    flow: regFlow !== 'none' ? regFlow : null,
+    symptoms: regSymptoms.length ? [...regSymptoms] : [],
+    mood: regMood,
+    energy: parseInt(document.getElementById('regEnergy').value),
+    cervicalMucus: regMucus,
+    sexualActivity: regSex !== 'none' ? regSex : null,
+    notes: document.getElementById('regNotes').value.trim() || null,
+    registeredBy: currentProfile ? currentProfile.id : null,
+    lastModified: Date.now()
+  };
+
+  const idx = logs.findIndex(l => l.date === ds);
+  if (idx >= 0) logs[idx] = entry; else logs.push(entry);
+  logs.sort((a, b) => a.date.localeCompare(b.date));
+  save(KEYS.logs, logs);
+
+  // If flow was set and no cycle starts on this date, check if we should auto-create
+  if (entry.flow && entry.flow !== 'none') {
+    const existingCycle = cycles.find(c => c.startDate <= ds && (!c.endDate || c.endDate >= ds));
+    if (!existingCycle) {
+      // Find the first consecutive flow day
+      let startDate = ds;
+      for (let i = 1; i <= 7; i++) {
+        const prev = addDays(ds, -i);
+        const prevLog = logs.find(l => l.date === prev);
+        if (prevLog && prevLog.flow && prevLog.flow !== 'none') {
+          startDate = prev;
+        } else break;
+      }
+      if (!cycles.find(c => c.startDate === startDate)) {
+        startPeriodOn(startDate);
+      }
+    }
+  }
+
+  toast('Registro salvo');
+}
+
+// ── Insights ──
+function renderInsights() {
+  renderStats();
+  renderCycleChart();
+  renderSymptomPatterns();
+  renderYearOverview();
+}
+
+function renderStats() {
+  const grid = document.getElementById('statsGrid');
+  const avgCycle = getAvgCycleLength();
+  const avgPeriod = getAvgPeriodLength();
+  const completedCycles = cycles.filter(c => c.cycleLength);
+  const totalLogs = logs.length;
+
+  let regularity = '-';
+  let regClass = '';
+  if (completedCycles.length >= 3) {
+    const stdDev = Math.sqrt(completedCycles.slice(-6).reduce((s, c) => s + Math.pow(c.cycleLength - avgCycle, 2), 0) / Math.min(completedCycles.length, 6));
+    if (stdDev <= 2) { regularity = 'Regular'; regClass = 'phase-safe'; }
+    else if (stdDev <= 5) { regularity = 'Levem. irregular'; regClass = 'phase-luteal'; }
+    else { regularity = 'Irregular'; regClass = 'phase-menstrual'; }
+  }
+
+  grid.innerHTML = `
+    <div class="stat-card"><div class="stat-icon">📏</div><div class="stat-value">${avgCycle}</div><div class="stat-label">Ciclo médio (dias)</div></div>
+    <div class="stat-card"><div class="stat-icon">🩸</div><div class="stat-value">${avgPeriod}</div><div class="stat-label">Menstruação (dias)</div></div>
+    <div class="stat-card"><div class="stat-icon">🔄</div><div class="stat-value">${completedCycles.length}</div><div class="stat-label">Ciclos registrados</div></div>
+    <div class="stat-card"><div class="stat-icon">📝</div><div class="stat-value">${totalLogs}</div><div class="stat-label">Registros totais</div></div>
+  `;
+  if (regularity !== '-') {
+    grid.innerHTML += `<div class="stat-card" style="grid-column:span 2"><div class="regularity-badge ${regClass}">${regularity}</div><div class="stat-label" style="margin-top:4px">Regularidade (últimos ciclos)</div></div>`;
+  }
+}
+
+function renderCycleChart() {
+  const canvas = document.getElementById('chartCycles');
+  const completed = cycles.filter(c => c.cycleLength);
+  if (completed.length < 2) {
+    canvas.parentElement.style.display = 'none';
+    return;
+  }
+  canvas.parentElement.style.display = '';
+  const labels = completed.slice(-12).map((c, i) => 'Ciclo ' + (i + 1));
+  const data = completed.slice(-12).map(c => c.cycleLength);
+
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Duração (dias)',
+        data,
+        borderColor: '#8B5CF6',
+        backgroundColor: 'rgba(139,92,246,.1)',
+        fill: true,
+        tension: .3,
+        pointRadius: 5,
+        pointBackgroundColor: '#8B5CF6'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: false, grid: { color: '#E5E7EB' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderSymptomPatterns() {
+  const el = document.getElementById('symptomPatterns');
+  if (!logs.length) { el.innerHTML = '<p style="font-size:.85rem;color:var(--text-secondary)">Nenhum registro ainda</p>'; return; }
+
+  const counts = {};
+  logs.forEach(l => {
+    if (l.symptoms) l.symptoms.forEach(s => { counts[s] = (counts[s] || 0) + 1; });
+  });
+
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const max = sorted.length ? sorted[0][1] : 1;
+
+  if (!sorted.length) { el.innerHTML = '<p style="font-size:.85rem;color:var(--text-secondary)">Nenhum sintoma registrado</p>'; return; }
+
+  el.innerHTML = sorted.map(([id, count]) => {
+    const sym = SYMPTOMS.find(s => s.id === id);
+    const pct = Math.round((count / max) * 100);
+    return `<div class="symptom-pattern">
+      <span class="sp-name">${sym ? sym.icon + ' ' + sym.label : id}</span>
+      <div class="sp-bar"><div class="sp-fill" style="width:${pct}%"></div></div>
+      <span class="sp-count">${count}x</span>
+    </div>`;
+  }).join('');
+}
+
+function renderYearOverview() {
+  const el = document.getElementById('yearOverview');
+  const year = new Date().getFullYear();
+  let html = '';
+  for (let m = 0; m < 12; m++) {
+    const dim = new Date(year, m + 1, 0).getDate();
+    const firstDay = new Date(year, m, 1).getDay();
+    html += `<div class="year-month"><div class="month-name">${MONTH_NAMES[m].substring(0, 3)}</div><div class="month-grid">`;
+    for (let i = 0; i < firstDay; i++) html += '<div class="yd"></div>';
+    for (let d = 1; d <= dim; d++) {
+      const ds = fmtDate(new Date(year, m, d));
+      const info = getPhaseForDate(ds);
+      let color = 'var(--border)';
+      if (info.phase === 'menstrual') color = 'var(--menstrual)';
+      else if (info.phase === 'fertile' || info.phase === 'ovulation') color = 'var(--fertile)';
+      else if (info.phase === 'luteal') color = 'var(--luteal)';
+      else if (info.phase === 'safe') color = 'var(--safe)';
+      const opacity = info.predicted ? '.35' : '1';
+      html += `<div class="yd" style="background:${color};opacity:${opacity}" title="${ds}"></div>`;
+    }
+    html += '</div></div>';
+  }
+  el.innerHTML = html;
+}
+
+// ── Settings ──
+function loadSettingsUI() {
+  document.getElementById('setCycleLen').value = settings.defaultCycleLength;
+  document.getElementById('setPeriodLen').value = settings.defaultPeriodLength;
+  document.getElementById('setReminderDays').value = settings.reminderPeriodDays;
+  document.getElementById('setReminderTime').value = settings.reminderDailyTime;
+  if (settings.reminderFertile) document.getElementById('togFertile').classList.add('on');
+  if (settings.reminderDaily) document.getElementById('togDaily').classList.add('on');
+  updatePinButton();
+  renderProfileSettings();
+  renderSyncSettings();
+
+  // Auto-save settings on change
+  ['setCycleLen','setPeriodLen','setReminderDays','setReminderTime'].forEach(id => {
+    document.getElementById(id).addEventListener('change', saveSettings);
+  });
+}
+
+function toggleSetting(el) {
+  el.classList.toggle('on');
+  saveSettings();
+}
+
+function saveSettings() {
+  settings.defaultCycleLength = clamp(parseInt(document.getElementById('setCycleLen').value) || 28, 21, 35);
+  settings.defaultPeriodLength = clamp(parseInt(document.getElementById('setPeriodLen').value) || 5, 2, 8);
+  settings.reminderPeriodDays = clamp(parseInt(document.getElementById('setReminderDays').value) || 2, 0, 7);
+  settings.reminderFertile = document.getElementById('togFertile').classList.contains('on');
+  settings.reminderDaily = document.getElementById('togDaily').classList.contains('on');
+  settings.reminderDailyTime = document.getElementById('setReminderTime').value || '20:00';
+  settings.lastModified = Date.now();
+  save(KEYS.settings, settings);
+}
+
+function updatePinButton() {
+  if (!currentProfile) return;
+  document.getElementById('pinSettingBtn').textContent = currentProfile.pin ? 'Alterar PIN' : 'Configurar';
+}
+
+function renderProfileSettings() {
+  const el = document.getElementById('profileSettingsList');
+  if (!el) return;
+  el.innerHTML = profiles.map(p => {
+    const isCurrent = currentProfile && p.id === currentProfile.id;
+    const canRemove = p.role === 'parceiro';
+    return `<div class="profile-settings-card" ${isCurrent ? 'style="border:1.5px solid var(--primary)"' : ''}>
+      <span class="psc-avatar">${p.avatar}</span>
+      <div class="psc-info">
+        <div class="psc-name">${p.name}${isCurrent ? ' (você)' : ''}</div>
+        <div class="psc-role">${p.role === 'titular' ? 'Titular' : 'Parceiro(a)'}${p.pin ? ' · 🔒 PIN' : ''}</div>
+      </div>
+      <div class="psc-actions">
+        <button class="setting-btn outline" style="padding:6px 10px;font-size:.75rem" onclick="editProfile('${p.id}')">Editar</button>
+        ${canRemove ? `<button class="setting-btn danger" style="padding:6px 10px;font-size:.75rem" onclick="removeProfile('${p.id}')">Remover</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Show/hide add partner button
+  const addBtn = document.getElementById('addPartnerBtn');
+  if (addBtn) addBtn.style.display = profiles.length >= 2 ? 'none' : '';
+}
+
+function editProfile(profileId) {
+  const profile = profiles.find(p => p.id === profileId);
+  if (!profile) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'editProfileOverlay';
+  overlay.innerHTML = `<div class="modal center">
+    <h2 style="text-align:center">Editar perfil</h2>
+    <label>Nome</label>
+    <input type="text" id="editProfileName" value="${profile.name}" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:1rem;margin-bottom:12px">
+    <label>Avatar</label>
+    <div class="avatar-grid" id="editAvatarGrid">
+      ${AVATARS.map(a => `<button onclick="selectAvatar(this)" data-avatar="${a}" ${a === profile.avatar ? 'class="active"' : ''}>${a}</button>`).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="detail-btn outline" onclick="document.getElementById('editProfileOverlay').remove()">Cancelar</button>
+      <button class="save-btn" style="width:auto;padding:12px 24px" onclick="confirmEditProfile('${profileId}')">Salvar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function confirmEditProfile(profileId) {
+  const profile = profiles.find(p => p.id === profileId);
+  if (!profile) return;
+
+  const name = document.getElementById('editProfileName').value.trim();
+  if (!name) { toast('Digite um nome'); return; }
+
+  const avatarBtn = document.querySelector('#editAvatarGrid button.active');
+  const avatar = avatarBtn ? avatarBtn.dataset.avatar : profile.avatar;
+
+  profile.name = name;
+  profile.avatar = avatar;
+  profile.lastModified = Date.now();
+  saveProfiles();
+
+  // Update current profile reference if editing self
+  if (currentProfile && currentProfile.id === profileId) {
+    currentProfile = profile;
+    document.getElementById('topbarAvatar').textContent = profile.avatar;
+    document.getElementById('topbarName').textContent = profile.name;
+    document.getElementById('sidebarAvatar').textContent = profile.avatar;
+    document.getElementById('sidebarName').textContent = profile.name;
+  }
+
+  document.getElementById('editProfileOverlay').remove();
+  renderProfileSettings();
+  toast('Perfil atualizado');
+}
+
+function removeProfile(profileId) {
+  const profile = profiles.find(p => p.id === profileId);
+  if (!profile) return;
+  if (profile.role === 'titular') { toast('O perfil titular não pode ser removido'); return; }
+  if (!confirm(`Remover o perfil "${profile.name}"?`)) return;
+
+  profiles = profiles.filter(p => p.id !== profileId);
+  saveProfiles();
+  renderProfileSettings();
+  toast('Perfil removido');
+}
+
+// ── PIN ──
+let pinBuffer = '';
+let pinMode = 'unlock'; // 'unlock' | 'setup' | 'confirm'
+let pinSetupValue = '';
+let pinTargetProfile = null; // profile being unlocked
+
+function showPinScreenForProfile(profile) {
+  pinBuffer = '';
+  pinMode = 'unlock';
+  pinTargetProfile = profile;
+  document.getElementById('pinScreen').style.display = '';
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'none';
+  document.getElementById('pinAvatar').textContent = profile.avatar;
+  document.getElementById('pinTitle').textContent = profile.name;
+  document.getElementById('pinSubtitle').textContent = 'Digite seu PIN';
+  renderPinDots();
+  renderPinPad();
+}
+
+function pinBackToLogin() {
+  pinBuffer = '';
+  pinTargetProfile = null;
+  if (pinMode === 'setup') {
+    // Was setting up PIN from settings — go back to app
+    showApp();
+    return;
+  }
+  showLoginScreen();
+}
+
+function renderPinDots() {
+  const el = document.getElementById('pinDots');
+  let html = '';
+  for (let i = 0; i < 4; i++) {
+    html += `<div class="pin-dot${i < pinBuffer.length ? ' filled' : ''}"></div>`;
+  }
+  el.innerHTML = html;
+}
+
+function renderPinPad() {
+  const el = document.getElementById('pinPad');
+  let html = '';
+  for (let i = 1; i <= 9; i++) html += `<button class="pin-key" onclick="pinInput('${i}')">${i}</button>`;
+  html += '<button class="pin-key empty"></button>';
+  html += '<button class="pin-key" onclick="pinInput(\'0\')">0</button>';
+  html += '<button class="pin-key backspace" onclick="pinBackspace()">&#9003;</button>';
+  el.innerHTML = html;
+}
+
+function pinInput(n) {
+  if (pinBuffer.length >= 4) return;
+  pinBuffer += n;
+  renderPinDots();
+  if (pinBuffer.length === 4) {
+    setTimeout(() => {
+      if (pinMode === 'unlock') {
+        if (pinTargetProfile && pinBuffer === pinTargetProfile.pin) {
+          activateProfile(pinTargetProfile);
+          pinTargetProfile = null;
+        } else {
+          toast('PIN incorreto');
+          pinBuffer = '';
+          renderPinDots();
+        }
+      } else if (pinMode === 'setup') {
+        pinSetupValue = pinBuffer;
+        pinBuffer = '';
+        pinMode = 'confirm';
+        document.getElementById('pinSubtitle').textContent = 'Confirme o PIN';
+        renderPinDots();
+      } else if (pinMode === 'confirm') {
+        if (pinBuffer === pinSetupValue) {
+          currentProfile.pin = pinBuffer;
+          saveProfiles();
+          toast('PIN configurado');
+          showApp();
+          updatePinButton();
+        } else {
+          toast('PINs não coincidem');
+          pinBuffer = '';
+          pinMode = 'setup';
+          document.getElementById('pinSubtitle').textContent = 'Escolha um PIN de 4 dígitos';
+          renderPinDots();
+        }
+      }
+    }, 200);
+  }
+}
+
+function pinBackspace() {
+  pinBuffer = pinBuffer.slice(0, -1);
+  renderPinDots();
+}
+
+function setupPin() {
+  if (!currentProfile) return;
+  if (currentProfile.pin) {
+    if (confirm('Remover PIN atual?')) {
+      currentProfile.pin = null;
+      saveProfiles();
+      toast('PIN removido');
+      updatePinButton();
+      return;
+    }
+  }
+  pinBuffer = '';
+  pinMode = 'setup';
+  pinSetupValue = '';
+  pinTargetProfile = currentProfile;
+  document.getElementById('pinScreen').style.display = '';
+  document.getElementById('appShell').style.display = 'none';
+  document.getElementById('pinAvatar').textContent = currentProfile.avatar;
+  document.getElementById('pinTitle').textContent = currentProfile.name;
+  document.getElementById('pinSubtitle').textContent = 'Escolha um PIN de 4 dígitos';
+  renderPinDots();
+  renderPinPad();
+}
+
+// ── Export / Import ──
+function exportData() {
+  const data = { cycles, logs, settings, profiles, exportDate: new Date().toISOString(), version: '1.2.0' };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'meuciclo_backup_' + today() + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('Dados exportados');
+}
+
+function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!data.cycles || !data.logs) throw new Error('Formato inválido');
+      if (!confirm('Isso substituirá todos os dados atuais. Continuar?')) return;
+      cycles = data.cycles;
+      logs = data.logs;
+      if (data.settings) settings = Object.assign(settings, data.settings);
+      if (data.profiles && data.profiles.length) {
+        profiles = data.profiles;
+        saveProfiles();
+        // Set current to first profile
+        currentProfile = profiles[0];
+        localStorage.setItem(KEYS.currentProfile, currentProfile.id);
+      }
+      save(KEYS.cycles, cycles);
+      save(KEYS.logs, logs);
+      save(KEYS.settings, settings);
+      toast('Dados importados');
+      loadSettingsUI();
+      // Update topbar/sidebar with new profile
+      if (currentProfile) {
+        document.getElementById('topbarAvatar').textContent = currentProfile.avatar;
+        document.getElementById('topbarName').textContent = currentProfile.name;
+        document.getElementById('sidebarAvatar').textContent = currentProfile.avatar;
+        document.getElementById('sidebarName').textContent = currentProfile.name;
+        document.getElementById('sidebarRole').textContent = currentProfile.role === 'titular' ? 'Titular' : 'Parceiro(a)';
+      }
+      navigate(currentPage);
+    } catch {
+      toast('Erro ao importar arquivo');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function clearAllData() {
+  if (!confirm('Apagar TODOS os dados? Esta ação não pode ser desfeita.')) return;
+  if (!confirm('Tem certeza? Todos os registros e perfis serão perdidos.')) return;
+  // Disconnect sync if active
+  if (syncState.enabled) signOutFirebase();
+  localStorage.removeItem(KEYS.cycles);
+  localStorage.removeItem(KEYS.logs);
+  localStorage.removeItem(KEYS.onboarded);
+  localStorage.removeItem(KEYS.profiles);
+  localStorage.removeItem(KEYS.currentProfile);
+  cycles = [];
+  logs = [];
+  profiles = [];
+  currentProfile = null;
+  toast('Dados apagados');
+  showCreateProfileModal(true);
+}
+
+// ── Notifications ──
+function requestNotifPermission() {
+  if (!('Notification' in window)) { toast('Notificações não suportadas neste navegador'); return; }
+  Notification.requestPermission().then(p => {
+    if (p === 'granted') toast('Notificações ativadas');
+    else toast('Permissão negada');
+  });
+}
+
+function checkNotificationSchedule() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+  const last = getLastCycle();
+  if (!last) return;
+
+  const daysUntil = getDaysUntilNextPeriod();
+  if (daysUntil !== null && daysUntil > 0 && daysUntil <= settings.reminderPeriodDays) {
+    scheduleNotification('Lembrete', `Sua menstruação está prevista em ${daysUntil} dia${daysUntil > 1 ? 's' : ''}.`);
+  }
+
+  if (settings.reminderFertile) {
+    const info = getPhaseForDate(today());
+    if (info.phase === 'fertile' && info.day === (getAvgCycleLength() - 14 - 5)) {
+      scheduleNotification('Lembrete', 'Sua janela fértil começa hoje.');
+    }
+  }
+}
+
+function scheduleNotification(title, body) {
+  const lastNotif = localStorage.getItem('meuciclo_last_notif');
+  if (lastNotif === today()) return; // One per day max
+  localStorage.setItem('meuciclo_last_notif', today());
+  new Notification('MeuCiclo: ' + title, { body, icon: 'icon-192.png', badge: 'icon-192.png' });
+}
+
+// ── Onboarding (for users who already have profiles but no cycle data) ──
+function showOnboarding() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal center">
+    <div style="text-align:center;font-size:2.4rem;margin-bottom:8px">🌸</div>
+    <h2 style="text-align:center">Registrar primeiro ciclo</h2>
+    <p style="text-align:center">Para começar, informe quando foi sua última menstruação.</p>
+    <label>Quando começou sua última menstruação?</label>
+    <input type="date" id="onboardDate" max="${today()}" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:1rem;margin-bottom:12px">
+    <label>Ela já terminou?</label>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="sex-btn" id="onbEndYes" onclick="this.classList.add('active');document.getElementById('onbEndNo').classList.remove('active');document.getElementById('onbEndDateWrap').style.display=''">Sim</button>
+      <button class="sex-btn active" id="onbEndNo" onclick="this.classList.add('active');document.getElementById('onbEndYes').classList.remove('active');document.getElementById('onbEndDateWrap').style.display='none'">Não / Não sei</button>
+    </div>
+    <div id="onbEndDateWrap" style="display:none">
+      <label>Quando terminou?</label>
+      <input type="date" id="onboardEndDate" max="${today()}" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:1rem;margin-bottom:12px">
+    </div>
+    <div class="modal-actions">
+      <button class="detail-btn outline" onclick="skipOnboarding(this)">Pular</button>
+      <button class="save-btn" style="width:auto;padding:12px 24px" onclick="finishOnboarding(this)">Começar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function finishOnboarding(btn) {
+  const date = document.getElementById('onboardDate').value;
+  if (!date) { toast('Selecione a data da última menstruação'); return; }
+
+  const endDate = document.getElementById('onbEndYes').classList.contains('active')
+    ? document.getElementById('onboardEndDate').value || null
+    : null;
+
+  const cycle = {
+    id: 'cycle_' + Date.now(),
+    startDate: date,
+    endDate: endDate,
+    cycleLength: null,
+    periodLength: endDate ? diffDays(endDate, date) + 1 : null,
+    registeredBy: currentProfile ? currentProfile.id : null,
+    lastModified: Date.now()
+  };
+  cycles.push(cycle);
+  save(KEYS.cycles, cycles);
+  localStorage.setItem(KEYS.onboarded, '1');
+  btn.closest('.modal-overlay').remove();
+  toast('Pronta! Seu ciclo foi registrado.');
+  navigate('dashboard');
+}
+
+function skipOnboarding(btn) {
+  localStorage.setItem(KEYS.onboarded, '1');
+  btn.closest('.modal-overlay').remove();
+  navigate('dashboard');
+}
+
+// ── Migration: old data without profiles ──
+function migrateOldData() {
+  // If there are cycles/logs/settings but no profiles, create default titular profile
+  const hasData = cycles.length > 0 || logs.length > 0 || localStorage.getItem(KEYS.onboarded);
+  if (hasData && profiles.length === 0) {
+    // Check for old PIN in settings
+    const oldSettings = load(KEYS.settings, {});
+    const oldPin = oldSettings.pin || localStorage.getItem(KEYS.pin) || null;
+
+    const profile = {
+      id: 'prof_' + Date.now(),
+      name: 'Meu perfil',
+      role: 'titular',
+      avatar: '🌸',
+      pin: oldPin,
+      createdAt: today()
+    };
+    profiles.push(profile);
+    saveProfiles();
+
+    // Clean old pin from settings
+    if (oldSettings.pin !== undefined) {
+      delete oldSettings.pin;
+      save(KEYS.settings, oldSettings);
+    }
+    localStorage.removeItem(KEYS.pin);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// ── SYNC: Criptografia (Web Crypto API — AES-GCM 256) ──
+// ══════════════════════════════════════════════════════
+
+async function generateEncryptionKey() {
+  const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+  const raw = await crypto.subtle.exportKey('raw', key);
+  return btoa(String.fromCharCode(...new Uint8Array(raw)));
+}
+
+async function importCryptoKey(keyBase64) {
+  const raw = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0));
+  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+async function encryptData(jsonString, keyBase64) {
+  const key = await importCryptoKey(keyBase64);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(jsonString);
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+  combined.set(iv);
+  combined.set(new Uint8Array(ciphertext), iv.length);
+  return btoa(String.fromCharCode(...combined));
+}
+
+async function decryptData(base64, keyBase64) {
+  const key = await importCryptoKey(keyBase64);
+  const combined = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+  const iv = combined.slice(0, 12);
+  const ciphertext = combined.slice(12);
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+  return new TextDecoder().decode(decrypted);
+}
+
+// ══════════════════════════════════════════════════════
+// ── SYNC: Firebase Init + Auth ──
+// ══════════════════════════════════════════════════════
+
+function initFirebase() {
+  if (firebaseApp) return true;
+  if (typeof firebase === 'undefined') return false;
+  if (FIREBASE_CONFIG.apiKey === 'SUBSTITUIR') return false;
+  try {
+    firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
+    firebaseAuth = firebase.auth();
+    firebaseDb = firebase.database();
+    return true;
+  } catch (e) {
+    console.error('Firebase init error:', e);
+    return false;
+  }
+}
+
+async function signUpWithEmail(email, password) {
+  if (!initFirebase()) throw new Error('Firebase não configurado');
+  return firebaseAuth.createUserWithEmailAndPassword(email, password);
+}
+
+async function signInWithEmail(email, password) {
+  if (!initFirebase()) throw new Error('Firebase não configurado');
+  return firebaseAuth.signInWithEmailAndPassword(email, password);
+}
+
+async function signOutFirebase() {
+  stopSyncListener();
+  if (firebaseAuth) await firebaseAuth.signOut();
+  syncState = { enabled: false, syncing: false, lastSync: null, error: null };
+  localStorage.removeItem(KEYS.syncEnabled);
+  localStorage.removeItem(KEYS.syncRoom);
+  localStorage.removeItem(KEYS.syncKey);
+  localStorage.removeItem(KEYS.syncVersion);
+  updateSyncUI();
+  renderSyncSettings();
+}
+
+function maybeAutoInitSync() {
+  const enabled = localStorage.getItem(KEYS.syncEnabled);
+  const room = localStorage.getItem(KEYS.syncRoom);
+  const key = localStorage.getItem(KEYS.syncKey);
+  if (enabled !== '1' || !room || !key) return;
+  if (!initFirebase()) return;
+  syncState.enabled = true;
+  updateSyncUI();
+  // Wait for auth state
+  firebaseAuth.onAuthStateChanged(user => {
+    if (user && syncState.enabled) {
+      startSyncListener();
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════
+// ── SYNC: Push / Pull / Merge ──
+// ══════════════════════════════════════════════════════
+
+function debouncedPush() {
+  clearTimeout(pushDebounceTimer);
+  pushDebounceTimer = setTimeout(() => pushToFirebase(), 2000);
+}
+
+async function pushToFirebase() {
+  if (!syncState.enabled || syncState.syncing) return;
+  const roomId = localStorage.getItem(KEYS.syncRoom);
+  const encKey = localStorage.getItem(KEYS.syncKey);
+  if (!roomId || !encKey || !firebaseDb || !firebaseAuth.currentUser) return;
+
+  syncState.syncing = true;
+  updateSyncUI();
+
+  try {
+    const payload = JSON.stringify({
+      cycles, logs, settings, profiles,
+      lastModified: Date.now()
+    });
+    const encrypted = await encryptData(payload, encKey);
+    const version = parseInt(localStorage.getItem(KEYS.syncVersion) || '0') + 1;
+
+    await firebaseDb.ref('rooms/' + roomId + '/sync').set({
+      data: encrypted,
+      version: version,
+      lastUpdatedBy: firebaseAuth.currentUser.uid,
+      lastUpdatedAt: firebase.database.ServerValue.TIMESTAMP
+    });
+
+    localStorage.setItem(KEYS.syncVersion, String(version));
+    syncState.lastSync = new Date();
+    syncState.error = null;
+  } catch (e) {
+    console.error('Push error:', e);
+    syncState.error = e.message;
+  }
+  syncState.syncing = false;
+  updateSyncUI();
+}
+
+async function pullFromFirebase() {
+  if (!syncState.enabled || syncState.syncing) return;
+  const roomId = localStorage.getItem(KEYS.syncRoom);
+  const encKey = localStorage.getItem(KEYS.syncKey);
+  if (!roomId || !encKey || !firebaseDb) return;
+
+  syncState.syncing = true;
+  updateSyncUI();
+
+  try {
+    const snap = await firebaseDb.ref('rooms/' + roomId + '/sync').once('value');
+    const val = snap.val();
+    if (!val || !val.data) { syncState.syncing = false; updateSyncUI(); return; }
+
+    const json = await decryptData(val.data, encKey);
+    const incoming = JSON.parse(json);
+    mergeData(incoming);
+
+    localStorage.setItem(KEYS.syncVersion, String(val.version || 0));
+    syncState.lastSync = new Date();
+    syncState.error = null;
+  } catch (e) {
+    console.error('Pull error:', e);
+    syncState.error = e.message;
+  }
+  syncState.syncing = false;
+  updateSyncUI();
+}
+
+function mergeData(incoming) {
+  // Merge cycles by id — lastModified wins
+  if (incoming.cycles) {
+    const map = new Map();
+    cycles.forEach(c => map.set(c.id, c));
+    incoming.cycles.forEach(c => {
+      const existing = map.get(c.id);
+      if (!existing || (c.lastModified || 0) > (existing.lastModified || 0)) {
+        map.set(c.id, c);
+      }
+    });
+    cycles = Array.from(map.values()).sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+    save(KEYS.cycles, cycles);
+  }
+
+  // Merge logs by date — lastModified wins
+  if (incoming.logs) {
+    const map = new Map();
+    logs.forEach(l => map.set(l.date, l));
+    incoming.logs.forEach(l => {
+      const existing = map.get(l.date);
+      if (!existing || (l.lastModified || 0) > (existing.lastModified || 0)) {
+        map.set(l.date, l);
+      }
+    });
+    logs = Array.from(map.values()).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    save(KEYS.logs, logs);
+  }
+
+  // Merge settings — lastModified wins (whole object)
+  if (incoming.settings && (incoming.settings.lastModified || 0) > (settings.lastModified || 0)) {
+    settings = Object.assign(settings, incoming.settings);
+    save(KEYS.settings, settings);
+  }
+
+  // Merge profiles by id — lastModified wins
+  if (incoming.profiles) {
+    const map = new Map();
+    profiles.forEach(p => map.set(p.id, p));
+    incoming.profiles.forEach(p => {
+      const existing = map.get(p.id);
+      if (!existing || (p.lastModified || 0) > (existing.lastModified || 0)) {
+        map.set(p.id, p);
+      }
+    });
+    profiles = Array.from(map.values());
+    saveProfiles();
+  }
+
+  // Refresh UI if app is visible
+  if (document.getElementById('appShell').style.display !== 'none') {
+    if (currentPage === 'dashboard') renderDashboard();
+    if (currentPage === 'calendar') renderCalendar();
+    if (currentPage === 'insights') renderInsights();
+    if (currentPage === 'settings') { loadSettingsUI(); renderSyncSettings(); }
+  }
+}
+
+function startSyncListener() {
+  stopSyncListener();
+  const roomId = localStorage.getItem(KEYS.syncRoom);
+  if (!roomId || !firebaseDb) return;
+
+  syncListener = firebaseDb.ref('rooms/' + roomId + '/sync').on('value', snap => {
+    const val = snap.val();
+    if (!val) return;
+    const localVersion = parseInt(localStorage.getItem(KEYS.syncVersion) || '0');
+    const uid = firebaseAuth.currentUser ? firebaseAuth.currentUser.uid : null;
+    // Pull only if remote version is newer and not by us
+    if (val.version > localVersion && val.lastUpdatedBy !== uid) {
+      pullFromFirebase();
+    }
+  });
+}
+
+function stopSyncListener() {
+  if (syncListener && firebaseDb) {
+    const roomId = localStorage.getItem(KEYS.syncRoom);
+    if (roomId) firebaseDb.ref('rooms/' + roomId + '/sync').off('value', syncListener);
+    syncListener = null;
+  }
+}
+
+async function forceSyncNow() {
+  closeSyncTooltip();
+  if (!syncState.enabled) { toast('Sincronização não está ativa'); return; }
+  await pushToFirebase();
+  toast('Sincronização concluída');
+}
+
+// ══════════════════════════════════════════════════════
+// ── SYNC: Pairing — Criar / Entrar Sala ──
+// ══════════════════════════════════════════════════════
+
+function generateUUID() {
+  return 'xxxx-xxxx-xxxx'.replace(/x/g, () => Math.floor(Math.random() * 16).toString(16));
+}
+
+async function createRoom(email, password) {
+  if (!initFirebase()) { toast('Firebase não configurado. Preencha FIREBASE_CONFIG no código.'); return; }
+  try {
+    // Criar conta ou login
+    let userCred;
+    try {
+      userCred = await signUpWithEmail(email, password);
+    } catch (e) {
+      if (e.code === 'auth/email-already-in-use') {
+        userCred = await signInWithEmail(email, password);
+      } else throw e;
+    }
+
+    const uid = userCred.user.uid;
+    const roomId = generateUUID();
+    const encKey = await generateEncryptionKey();
+
+    // Criar sala no Firebase
+    const members = {};
+    members[uid] = true;
+    await firebaseDb.ref('rooms/' + roomId + '/members').set(members);
+
+    // Salvar local
+    localStorage.setItem(KEYS.syncRoom, roomId);
+    localStorage.setItem(KEYS.syncKey, encKey);
+    localStorage.setItem(KEYS.syncEnabled, '1');
+    localStorage.setItem(KEYS.syncVersion, '0');
+    syncState.enabled = true;
+    syncState.error = null;
+
+    // Push inicial
+    await pushToFirebase();
+    startSyncListener();
+    updateSyncUI();
+    renderSyncSettings();
+
+    return { roomId, encKey };
+  } catch (e) {
+    console.error('createRoom error:', e);
+    toast('Erro: ' + (e.message || 'Falha ao criar sala'));
+    throw e;
+  }
+}
+
+async function joinRoom(roomId, encKey, email, password) {
+  if (!initFirebase()) { toast('Firebase não configurado'); return; }
+  try {
+    let userCred;
+    try {
+      userCred = await signUpWithEmail(email, password);
+    } catch (e) {
+      if (e.code === 'auth/email-already-in-use') {
+        userCred = await signInWithEmail(email, password);
+      } else throw e;
+    }
+
+    const uid = userCred.user.uid;
+
+    // Adicionar-se como membro
+    await firebaseDb.ref('rooms/' + roomId + '/members/' + uid).set(true);
+
+    // Salvar local
+    localStorage.setItem(KEYS.syncRoom, roomId);
+    localStorage.setItem(KEYS.syncKey, encKey);
+    localStorage.setItem(KEYS.syncEnabled, '1');
+    localStorage.setItem(KEYS.syncVersion, '0');
+    syncState.enabled = true;
+    syncState.error = null;
+
+    // Pull inicial (merge com dados locais)
+    await pullFromFirebase();
+    // Depois push para garantir merge bidirecional
+    await pushToFirebase();
+    startSyncListener();
+    updateSyncUI();
+    renderSyncSettings();
+
+    toast('Conectado à sala de sincronização!');
+  } catch (e) {
+    console.error('joinRoom error:', e);
+    toast('Erro: ' + (e.message || 'Falha ao entrar na sala'));
+    throw e;
+  }
+}
+
+function generateInviteLink(roomId, encKey) {
+  return 'https://fellipenn9.github.io/meuciclo/#join/' + roomId + '/' + encKey;
+}
+
+function handleInviteLinkOnInit() {
+  const hash = window.location.hash;
+  if (!hash.startsWith('#join/')) return;
+  const parts = hash.substring(6).split('/');
+  if (parts.length < 2) return;
+  const roomId = parts[0];
+  const encKey = parts[1];
+  // Limpar hash para não reprocessar
+  history.replaceState(null, '', window.location.pathname);
+  // Aguardar app carregar e mostrar modal
+  setTimeout(() => showJoinConfirmModal(roomId, encKey), 500);
+}
+
+// ══════════════════════════════════════════════════════
+// ── SYNC: UI (Modais + Settings + Indicador) ──
+// ══════════════════════════════════════════════════════
+
+function updateSyncUI() {
+  const indicator = document.getElementById('syncIndicator');
+  const dot = document.getElementById('syncDot');
+  if (!indicator || !dot) return;
+
+  if (syncState.enabled) {
+    indicator.classList.add('show');
+    dot.className = 'sync-dot';
+    if (syncState.syncing) {
+      dot.classList.add('syncing');
+    } else if (syncState.error) {
+      dot.classList.add('error');
+    } else if (!navigator.onLine) {
+      dot.classList.add('offline');
+    } else {
+      dot.classList.add('ok');
+    }
+  } else {
+    indicator.classList.remove('show');
+  }
+
+  // Update tooltip
+  const statusEl = document.getElementById('syncTooltipStatus');
+  const lastEl = document.getElementById('syncTooltipLast');
+  if (statusEl) {
+    if (syncState.syncing) statusEl.textContent = 'Sincronizando...';
+    else if (syncState.error) statusEl.textContent = 'Erro na sincronização';
+    else if (!navigator.onLine) statusEl.textContent = 'Offline';
+    else statusEl.textContent = 'Sincronizado';
+  }
+  if (lastEl && syncState.lastSync) {
+    lastEl.textContent = 'Último sync: ' + syncState.lastSync.toLocaleTimeString('pt-BR');
+  }
+}
+
+function toggleSyncTooltip() {
+  const tt = document.getElementById('syncTooltip');
+  tt.classList.toggle('show');
+}
+
+function closeSyncTooltip() {
+  const tt = document.getElementById('syncTooltip');
+  if (tt) tt.classList.remove('show');
+}
+
+// Close sync tooltip on outside click
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.sync-indicator')) closeSyncTooltip();
+});
+
+function renderSyncSettings() {
+  const el = document.getElementById('syncSettingsContent');
+  if (!el) return;
+
+  if (!syncState.enabled) {
+    el.innerHTML = `
+      <div class="sync-setup-box">
+        <p>Sincronize os dados entre aparelhos com criptografia de ponta a ponta. O Firebase nunca vê seus dados legíveis.</p>
+        <button class="setting-btn primary" onclick="showSyncSetupModal()">Configurar</button>
+      </div>`;
+    return;
+  }
+
+  const roomId = localStorage.getItem(KEYS.syncRoom) || '-';
+  const lastSync = syncState.lastSync ? syncState.lastSync.toLocaleString('pt-BR') : 'Nunca';
+  const status = syncState.syncing ? 'Sincronizando...' : (syncState.error ? 'Erro' : 'Ativo');
+
+  el.innerHTML = `
+    <div class="sync-status-box">
+      <div class="sync-info-row"><span class="sync-info-label">Status</span><span>${status}</span></div>
+      <div class="sync-info-row"><span class="sync-info-label">Sala</span><span style="font-family:monospace;font-size:.8rem">${roomId.substring(0, 12)}...</span></div>
+      <div class="sync-info-row"><span class="sync-info-label">Último sync</span><span>${lastSync}</span></div>
+      ${syncState.error ? `<div style="color:var(--menstrual);font-size:.8rem;margin-top:8px">${syncState.error}</div>` : ''}
+    </div>
+    <div class="setting-actions" style="margin-top:12px">
+      <button class="setting-btn outline" onclick="showInviteLinkModal()">Gerar link de convite</button>
+      <button class="setting-btn outline" onclick="forceSyncNow()">Sincronizar agora</button>
+      <button class="setting-btn danger" onclick="disconnectSync()">Desconectar</button>
+    </div>`;
+}
+
+function showSyncSetupModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'syncSetupOverlay';
+  overlay.innerHTML = `<div class="modal center">
+    <h2 style="text-align:center">Sincronização</h2>
+    <p style="text-align:center">Escolha como deseja configurar:</p>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <button class="save-btn" onclick="showSyncCreateModal()">Criar Nova Sala</button>
+      <button class="setting-btn outline" style="width:100%;padding:14px" onclick="showSyncJoinModal()">Tenho um Link de Convite</button>
+    </div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="detail-btn outline" onclick="document.getElementById('syncSetupOverlay').remove()">Cancelar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function showSyncCreateModal() {
+  const existing = document.getElementById('syncSetupOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'syncCreateOverlay';
+  overlay.innerHTML = `<div class="modal center">
+    <h2 style="text-align:center">Criar Sala</h2>
+    <p style="text-align:center">Crie uma conta para identificar este dispositivo.</p>
+    <label>Email</label>
+    <input type="email" id="syncEmail" placeholder="seu@email.com">
+    <label>Senha</label>
+    <input type="password" id="syncPassword" placeholder="Mínimo 6 caracteres">
+    <div class="modal-actions">
+      <button class="detail-btn outline" onclick="document.getElementById('syncCreateOverlay').remove()">Cancelar</button>
+      <button class="save-btn" style="width:auto;padding:12px 24px" id="syncCreateBtn" onclick="doCreateRoom()">Criar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => document.getElementById('syncEmail').focus(), 200);
+}
+
+async function doCreateRoom() {
+  const email = document.getElementById('syncEmail').value.trim();
+  const password = document.getElementById('syncPassword').value;
+  if (!email || !password) { toast('Preencha email e senha'); return; }
+  if (password.length < 6) { toast('Senha deve ter ao menos 6 caracteres'); return; }
+
+  const btn = document.getElementById('syncCreateBtn');
+  btn.textContent = 'Criando...';
+  btn.disabled = true;
+
+  try {
+    const result = await createRoom(email, password);
+    document.getElementById('syncCreateOverlay').remove();
+    showInviteLinkModalWithData(result.roomId, result.encKey);
+    toast('Sala criada com sucesso!');
+  } catch (e) {
+    btn.textContent = 'Criar';
+    btn.disabled = false;
+  }
+}
+
+function showSyncJoinModal() {
+  const existing = document.getElementById('syncSetupOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'syncJoinOverlay';
+  overlay.innerHTML = `<div class="modal center">
+    <h2 style="text-align:center">Entrar na Sala</h2>
+    <p style="text-align:center">Cole o link de convite recebido.</p>
+    <label>Link de convite</label>
+    <input type="text" id="syncInviteInput" placeholder="https://fellipenn9.github.io/meuciclo/#join/..." style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:.85rem;margin-bottom:12px;font-family:monospace">
+    <label>Email</label>
+    <input type="email" id="syncJoinEmail" placeholder="seu@email.com">
+    <label>Senha</label>
+    <input type="password" id="syncJoinPassword" placeholder="Mínimo 6 caracteres">
+    <div class="modal-actions">
+      <button class="detail-btn outline" onclick="document.getElementById('syncJoinOverlay').remove()">Cancelar</button>
+      <button class="save-btn" style="width:auto;padding:12px 24px" id="syncJoinBtn" onclick="doJoinRoom()">Entrar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => document.getElementById('syncInviteInput').focus(), 200);
+}
+
+async function doJoinRoom() {
+  const link = document.getElementById('syncInviteInput').value.trim();
+  const email = document.getElementById('syncJoinEmail').value.trim();
+  const password = document.getElementById('syncJoinPassword').value;
+
+  if (!link) { toast('Cole o link de convite'); return; }
+  if (!email || !password) { toast('Preencha email e senha'); return; }
+  if (password.length < 6) { toast('Senha deve ter ao menos 6 caracteres'); return; }
+
+  // Parse link
+  const hashIdx = link.indexOf('#join/');
+  if (hashIdx < 0) { toast('Link inválido. Deve conter #join/...'); return; }
+  const parts = link.substring(hashIdx + 6).split('/');
+  if (parts.length < 2) { toast('Link inválido'); return; }
+
+  const btn = document.getElementById('syncJoinBtn');
+  btn.textContent = 'Entrando...';
+  btn.disabled = true;
+
+  try {
+    await joinRoom(parts[0], parts[1], email, password);
+    document.getElementById('syncJoinOverlay').remove();
+  } catch (e) {
+    btn.textContent = 'Entrar';
+    btn.disabled = false;
+  }
+}
+
+function showJoinConfirmModal(roomId, encKey) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'syncJoinConfirmOverlay';
+  overlay.innerHTML = `<div class="modal center">
+    <h2 style="text-align:center">Convite de Sincronização</h2>
+    <p style="text-align:center">Você recebeu um convite para sincronizar dados do MeuCiclo. Crie uma conta para conectar este dispositivo.</p>
+    <label>Email</label>
+    <input type="email" id="syncJoinConfirmEmail" placeholder="seu@email.com">
+    <label>Senha</label>
+    <input type="password" id="syncJoinConfirmPassword" placeholder="Mínimo 6 caracteres">
+    <div class="modal-actions">
+      <button class="detail-btn outline" onclick="document.getElementById('syncJoinConfirmOverlay').remove()">Cancelar</button>
+      <button class="save-btn" style="width:auto;padding:12px 24px" id="syncJoinConfirmBtn" onclick="doJoinFromLink('${roomId}','${encKey}')">Conectar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => document.getElementById('syncJoinConfirmEmail').focus(), 200);
+}
+
+async function doJoinFromLink(roomId, encKey) {
+  const email = document.getElementById('syncJoinConfirmEmail').value.trim();
+  const password = document.getElementById('syncJoinConfirmPassword').value;
+  if (!email || !password) { toast('Preencha email e senha'); return; }
+  if (password.length < 6) { toast('Senha deve ter ao menos 6 caracteres'); return; }
+
+  const btn = document.getElementById('syncJoinConfirmBtn');
+  btn.textContent = 'Conectando...';
+  btn.disabled = true;
+
+  try {
+    await joinRoom(roomId, encKey, email, password);
+    document.getElementById('syncJoinConfirmOverlay').remove();
+  } catch (e) {
+    btn.textContent = 'Conectar';
+    btn.disabled = false;
+  }
+}
+
+function showInviteLinkModal() {
+  const roomId = localStorage.getItem(KEYS.syncRoom);
+  const encKey = localStorage.getItem(KEYS.syncKey);
+  if (!roomId || !encKey) { toast('Sync não configurado'); return; }
+  showInviteLinkModalWithData(roomId, encKey);
+}
+
+function showInviteLinkModalWithData(roomId, encKey) {
+  const link = generateInviteLink(roomId, encKey);
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'syncInviteOverlay';
+  overlay.innerHTML = `<div class="modal center">
+    <h2 style="text-align:center">Link de Convite</h2>
+    <p style="text-align:center">Compartilhe este link com seu parceiro(a) para conectar outro dispositivo:</p>
+    <div class="invite-link-box" id="inviteLinkText">${link}</div>
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button class="setting-btn primary" onclick="copyInviteLink()">Copiar</button>
+      <button class="setting-btn outline" onclick="shareInviteLink()">Compartilhar</button>
+    </div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="detail-btn outline" onclick="document.getElementById('syncInviteOverlay').remove()">Fechar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function copyInviteLink() {
+  const link = document.getElementById('inviteLinkText').textContent;
+  navigator.clipboard.writeText(link).then(() => toast('Link copiado!')).catch(() => toast('Erro ao copiar'));
+}
+
+function shareInviteLink() {
+  const link = document.getElementById('inviteLinkText').textContent;
+  if (navigator.share) {
+    navigator.share({ title: 'MeuCiclo — Sincronização', text: 'Entre neste link para sincronizar nossos dados do MeuCiclo:', url: link }).catch(() => {});
+  } else {
+    copyInviteLink();
+  }
+}
+
+async function disconnectSync() {
+  if (!confirm('Desconectar a sincronização? Seus dados locais serão mantidos.')) return;
+  await signOutFirebase();
+  toast('Sincronização desconectada');
+}
+
+// ── Toast ──
+function toast(msg) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, 2500);
+}
+
+// ── PWA Install ──
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  document.getElementById('installBanner').classList.add('show');
+});
+
+function installPWA() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(r => {
+      if (r.outcome === 'accepted') toast('App instalado!');
+      deferredInstallPrompt = null;
+      document.getElementById('installBanner').classList.remove('show');
+    });
+  } else {
+    toast('Use o menu do navegador para instalar');
+  }
+}
+
+window.addEventListener('appinstalled', () => {
+  document.getElementById('installBanner').classList.remove('show');
+});
+
+// ── Service Worker ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// ── Keyboard shortcut for date nav on register ──
+document.addEventListener('keydown', e => {
+  if (currentPage === 'register' && document.activeElement.tagName !== 'TEXTAREA') {
+    const dateInput = document.getElementById('regDate');
+    if (e.key === 'ArrowLeft') { dateInput.value = addDays(dateInput.value, -1); loadLogForDate(dateInput.value); }
+    if (e.key === 'ArrowRight') { dateInput.value = addDays(dateInput.value, 1); loadLogForDate(dateInput.value); }
+  }
+});
+
+// ── Touch swipe for calendar ──
+let touchStartX = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+document.addEventListener('touchend', e => {
+  if (currentPage !== 'calendar') return;
+  const diff = e.changedTouches[0].clientX - touchStartX;
+  if (Math.abs(diff) > 80) {
+    if (diff > 0) calPrev(); else calNext();
+  }
+}, { passive: true });
+
+// ── Online / Offline sync ──
+window.addEventListener('online', () => {
+  if (syncState.enabled) {
+    updateSyncUI();
+    pullFromFirebase();
+  }
+});
+window.addEventListener('offline', () => {
+  if (syncState.enabled) updateSyncUI();
+});
+
+// ── Start ──
+init();
+</script>
+</body>
+</html>
